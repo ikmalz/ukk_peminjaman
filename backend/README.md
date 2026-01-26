@@ -9,7 +9,4 @@ Struktur:
 - controllers : logika program
 - middlewares : autentikasi
 
-Menjalankan server:
-npm install
-copy .env.example .env
-npm run dev
+

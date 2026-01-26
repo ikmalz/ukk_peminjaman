@@ -18,10 +18,3 @@ ukk-peminjaman
 - backend  : API server dan koneksi database  
 - frontend : Tampilan web aplikasi  
 
-## Cara Menjalankan Backend  
-
-```bash
-cd backend
-npm install
-copy .env.example .env
-npm run dev
