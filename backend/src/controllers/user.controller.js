@@ -2,7 +2,7 @@ const db = require("../config/db");
 const bcrypt = require("bcrypt");
 
 exports.createUser = async (req, res) => {
-  const { name, email, role } = req.body;
+  const { name, email, role, password } = req.body;
 
   if (!name || !email || !role) {
     return res.status(400).json({
@@ -17,26 +17,31 @@ exports.createUser = async (req, res) => {
   }
 
   try {
-    const defaultPassword = "123456";
-    const passwordHash = await bcrypt.hash(defaultPassword, 10);
+    const finalPassword = password && password.trim() !== ""
+      ? password
+      : "123456";
+
+    const passwordHash = await bcrypt.hash(finalPassword, 10);
 
     const query = `
-      INSERT INTO users (name, email, password, role)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO users (name, email, password, role, force_password_change)
+      VALUES ($1, $2, $3, $4, true)
       RETURNING id_user
     `;
 
-    const result = await db.query(query, [name, email, passwordHash, role]);
+    const result = await db.query(query, [
+      name,
+      email,
+      passwordHash,
+      role,
+    ]);
 
     res.json({
       message: "User berhasil ditambahkan",
-      user: {
-        id_user: result.rows[0].id_user,
-        name,
-        email,
-        role,
-        password_default: defaultPassword,
-      },
+      info:
+        password && password.trim() !== ""
+          ? "Password ditentukan oleh admin"
+          : "Password default: 123456",
     });
   } catch (err) {
     if (err.code === "23505") {
@@ -51,6 +56,7 @@ exports.createUser = async (req, res) => {
     });
   }
 };
+
 
 exports.getAllUsers = async (req, res) => {
   try {
@@ -114,6 +120,12 @@ exports.updateUser = async (req, res) => {
     });
   }
 
+  if (role !== "petugas" && role !== "peminjam") {
+    return res.status(400).json({
+      message: "Role hanya boleh petugas atau peminjam",
+    });
+  }
+
   try {
     const query = `
       UPDATE users
@@ -138,6 +150,12 @@ exports.updateStatusUser = async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
+  if (req.user.id_user == id) {
+    return res.status(400).json({
+      message: "Tidak boleh mengubah status akun sendiri",
+    });
+  }
+
   try {
     const query = `
       UPDATE users
@@ -156,4 +174,48 @@ exports.updateStatusUser = async (req, res) => {
       message: "Gagal mengubah status user",
     });
   }
+};
+
+exports.resetPassword = async (req, res) => {
+  const { id } = req.params;
+  const defaultPassword = "123456";
+  const hash = await bcrypt.hash(defaultPassword, 10);
+
+  await db.query(
+    "UPDATE users SET password = $1, force_password_change = true WHERE id_user = $2",
+    [hash, id]
+  );
+
+  res.json({
+    message: "Password berhasil direset",
+    password_default: defaultPassword,
+  });
+};
+
+exports.changePassword = async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+  const id = req.user.id_user;
+
+  if (!oldPassword || !newPassword) {
+    return res.status(400).json({ message: "Password wajib diisi" });
+  }
+
+  const result = await db.query(
+    "SELECT password FROM users WHERE id_user = $1",
+    [id]
+  );
+
+  const match = await bcrypt.compare(oldPassword, result.rows[0].password);
+  if (!match) {
+    return res.status(400).json({ message: "Password lama salah" });
+  }
+
+  const hash = await bcrypt.hash(newPassword, 10);
+
+  await db.query(
+    "UPDATE users SET password = $1, force_password_change = false WHERE id_user = $2",
+    [hash, id]
+  );
+
+  res.json({ message: "Password berhasil diubah" });
 };

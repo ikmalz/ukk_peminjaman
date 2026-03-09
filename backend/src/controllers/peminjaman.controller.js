@@ -1,53 +1,103 @@
-const db = require("../config/db");
-const logAktivitas = require("../utils/logAktivitas");
+const db = require ('../config/db');
+const logAktivitas = require ('../utils/logAktivitas');
 
 exports.createPeminjaman = async (req, res) => {
   const id_user = req.user.id_user;
-  const { id_alat, tgl_pinjam, tgl_rencana_kembali } = req.body;
+
+  const {
+    id_alat,
+    tgl_pinjam,
+    tgl_rencana_kembali,
+    jumlah
+  } = req.body;
+
+  if (!id_alat || !tgl_pinjam || !tgl_rencana_kembali || !jumlah) {
+    return res.status(400).json({
+      message: 'Data peminjaman wajib diisi'
+    });
+  }
+
+  if (jumlah <= 0) {
+    return res.status(400).json({
+      message: 'Jumlah tidak valid'
+    });
+  }
+
+  if (new Date(tgl_rencana_kembali) < new Date(tgl_pinjam)) {
+    return res.status(400).json({
+      message: 'Tanggal kembali tidak valid'
+    });
+  }
+
+  const jatuhTempo = new Date(tgl_rencana_kembali);
 
   try {
-    const cek = await db.query(
-      "SELECT stok, status_aktif FROM alat WHERE id_alat = $1",
-      [id_alat],
-    );
+    const cekDenda = await db.query(`
+      SELECT 1
+      FROM denda d
+      JOIN pengembalian pg ON d.id_pengembalian = pg.id_pengembalian
+      JOIN peminjaman p ON pg.id_peminjaman = p.id_peminjaman
+      WHERE p.id_user = $1
+      AND d.status_bayar = 'belum_bayar'
+    `, [id_user]);
 
-    if (cek.rows.length === 0) {
-      return res.status(404).json({ message: "Alat tidak ditemukan" });
+    if (cekDenda.rows.length > 0) {
+      return res.status(403).json({
+        message: 'Anda memiliki denda yang belum dibayar'
+      });
     }
 
-    const alat = cek.rows[0];
+    // ========================
+    // CEK ALAT
+    // ========================
+    const cekAlat = await db.query(
+      'SELECT stok, status_aktif FROM alat WHERE id_alat = $1',
+      [id_alat]
+    );
+
+    if (cekAlat.rows.length === 0) {
+      return res.status(404).json({ message: 'Alat tidak ditemukan' });
+    }
+
+    const alat = cekAlat.rows[0];
 
     if (alat.status_aktif !== 1) {
-      return res.status(400).json({ message: "Alat tidak aktif" });
+      return res.status(400).json({ message: 'Alat tidak aktif' });
     }
 
-    if (alat.stok <= 0) {
-      return res.status(400).json({ message: "Stok alat habis" });
+    if (alat.stok < jumlah) {
+      return res.status(400).json({ message: 'Stok alat tidak mencukupi' });
     }
 
-    const insert = await db.query(
-      `
-      INSERT INTO peminjaman 
-      (id_user, id_alat, tgl_pinjam, tgl_rencana_kembali, status)
-      VALUES ($1,$2,$3,$4,'menunggu')
+    const insert = await db.query(`
+      INSERT INTO peminjaman
+      (id_user, id_alat, tgl_pinjam, tgl_rencana_kembali, tgl_jatuh_tempo, jumlah, status)
+      VALUES ($1,$2,$3,$4,$5,$6,'menunggu')
       RETURNING id_peminjaman
-      `,
-      [id_user, id_alat, tgl_pinjam, tgl_rencana_kembali],
-    );
+    `, [
+      id_user,
+      id_alat,
+      tgl_pinjam,
+      tgl_rencana_kembali,
+      jatuhTempo,
+      jumlah
+    ]);
 
     await logAktivitas({
       id_user,
-      aktivitas: "Mengajukan peminjaman alat",
-      id_peminjaman,
+      aktivitas: 'Mengajukan peminjaman alat',
+      id_peminjaman: insert.rows[0].id_peminjaman
     });
 
     res.json({
-      message: "Peminjaman berhasil diajukan",
-      id_peminjaman: insert.rows[0].id_peminjaman,
+      message: 'Peminjaman berhasil diajukan',
+      id_peminjaman: insert.rows[0].id_peminjaman
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Gagal mengajukan peminjaman" });
+    console.error('CREATE PEMINJAMAN ERROR:', err);
+    res.status(500).json({
+      message: 'Gagal mengajukan peminjaman'
+    });
   }
 };
 
@@ -67,16 +117,16 @@ exports.getAllPeminjaman = async (req, res) => {
       ORDER BY p.id_peminjaman DESC
     `;
 
-    const result = await db.query(query);
+    const result = await db.query (query);
 
-    res.json({
-      message: "Data peminjaman berhasil diambil",
+    res.json ({
+      message: 'Data peminjaman berhasil diambil',
       data: result.rows,
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      message: "Gagal mengambil data peminjaman",
+    console.error (err);
+    res.status (500).json ({
+      message: 'Gagal mengambil data peminjaman',
     });
   }
 };
@@ -91,6 +141,7 @@ exports.getMyPeminjaman = async (req, res) => {
         a.name AS alat,
         p.tgl_pinjam,
         p.tgl_rencana_kembali,
+        p.tgl_jatuh_tempo,
         p.status
       FROM peminjaman p
       JOIN alat a ON p.id_alat = a.id_alat
@@ -98,62 +149,107 @@ exports.getMyPeminjaman = async (req, res) => {
       ORDER BY p.id_peminjaman DESC
     `;
 
-    const result = await db.query(query, [id_user]);
+    const result = await db.query (query, [id_user]);
 
-    res.json({
-      message: "Data peminjaman saya",
+    res.json ({
       data: result.rows,
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      message: "Gagal mengambil data peminjaman",
+    console.error (err);
+    res.status (500).json ({
+      message: 'Gagal mengambil data peminjaman',
     });
   }
 };
 
 exports.updateStatusPeminjaman = async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body;
+  const {id} = req.params;
+  const {status} = req.body;
+
+  const statusValid = ['disetujui', 'ditolak'];
+  if (!statusValid.includes (status)) {
+    return res.status (400).json ({
+      message: 'Status tidak valid',
+    });
+  }
+
+  const client = await db.connect ();
 
   try {
-    const cek = await db.query(
-      "SELECT id_alat, status FROM peminjaman WHERE id_peminjaman = $1",
-      [id],
+    await client.query ('BEGIN');
+
+    const cek = await client.query (
+      'SELECT id_alat, status FROM peminjaman WHERE id_peminjaman = $1',
+      [id]
     );
 
     if (cek.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "Data peminjaman tidak ditemukan" });
+      await client.query ('ROLLBACK');
+      return res.status (404).json ({
+        message: 'Data peminjaman tidak ditemukan',
+      });
     }
 
     const peminjaman = cek.rows[0];
 
-    if (peminjaman.status !== "menunggu") {
-      return res.status(400).json({
-        message: "Peminjaman sudah diproses sebelumnya",
+    if (peminjaman.status !== 'menunggu') {
+      await client.query ('ROLLBACK');
+      return res.status (400).json ({
+        message: 'Peminjaman sudah diproses sebelumnya',
       });
     }
 
-    await db.query(
-      "UPDATE peminjaman SET status = $1 WHERE id_peminjaman = $2",
-      [status, id],
+    await client.query (
+      'UPDATE peminjaman SET status = $1 WHERE id_peminjaman = $2',
+      [status, id]
     );
 
-    if (status === "disetujui") {
-      await db.query("UPDATE alat SET stok = stok - 1 WHERE id_alat = $1", [
-        peminjaman.id_alat,
-      ]);
+    if (status === 'disetujui') {
+      await client.query (
+        'UPDATE alat SET stok = stok - 1 WHERE id_alat = $1',
+        [peminjaman.id_alat]
+      );
     }
 
-    res.json({
-      message: `Peminjaman berhasil ${status}`,
+    await client.query ('COMMIT');
+
+    res.json ({
+      message: status === 'disetujui'
+        ? 'Peminjaman disetujui'
+        : 'Peminjaman ditolak',
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      message: "Gagal mengubah status peminjaman",
+    await client.query ('ROLLBACK');
+    console.error ('UPDATE STATUS ERROR:', err);
+    res.status (500).json ({
+      message: 'Gagal memproses peminjaman',
+    });
+  } finally {
+    client.release ();
+  }
+};
+
+exports.getPeminjamanAktifUser = async (req, res) => {
+  const id_user = req.user.id_user;
+
+  try {
+    const result = await db.query (
+      `
+      SELECT id_alat
+      FROM peminjaman
+      WHERE id_user = $1
+      AND status IN ('menunggu','disetujui','dipinjam')
+      `,
+      [id_user]
+    );
+
+    res.json ({
+      data: result.rows,
+    });
+  } catch (err) {
+    console.error (err);
+    res.status (500).json ({
+      message: 'Gagal mengambil peminjaman aktif',
     });
   }
 };

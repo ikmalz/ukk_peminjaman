@@ -137,3 +137,34 @@ exports.deleteKategori = async (req, res) => {
     });
   }
 };
+
+exports.deleteKategori = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const cek = await db.query(
+      "SELECT COUNT(*) FROM alat WHERE id_kategori = $1",
+      [id]
+    );
+
+    if (parseInt(cek.rows[0].count) > 0) {
+      return res.status(400).json({
+        message: "Kategori tidak dapat dihapus karena masih digunakan oleh alat",
+      });
+    }
+
+    await db.query(
+      "DELETE FROM kategori_alat WHERE id_kategori = $1",
+      [id]
+    );
+
+    res.json({
+      message: "Kategori berhasil dihapus",
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      message: "Gagal menghapus kategori",
+    });
+  }
+};

@@ -10,4 +10,6 @@ router.get("/saya", verifyToken, isPeminjam, peminjamanController.getMyPeminjama
 router.get("/", verifyToken, isPetugas, peminjamanController.getAllPeminjaman);
 router.patch("/:id/status", verifyToken, isPetugas, peminjamanController.updateStatusPeminjaman);
 
+router.get("/aktif", verifyToken, isPeminjam, peminjamanController.getPeminjamanAktifUser);
+
 module.exports = router;

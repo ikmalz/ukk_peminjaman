@@ -7,5 +7,6 @@ const { verifyToken, isPeminjam, isPetugas } = require("../middlewares/auth.midd
 router.post("/", verifyToken, isPeminjam, pengembalianController.createPengembalian);
 router.get("/", verifyToken, isPetugas, pengembalianController.getAllPengembalian);
 router.post("/:id/verifikasi", verifyToken, isPetugas, pengembalianController.verifikasiPengembalian);
+router.patch("/:id/verifikasi", verifyToken, isPetugas, pengembalianController.verifikasiPengembalian);
 
 module.exports = router;

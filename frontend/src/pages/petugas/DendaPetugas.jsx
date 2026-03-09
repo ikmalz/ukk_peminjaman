@@ -1,49 +1,47 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../lib/api'
 
-export default function VerifikasiPeminjaman () {
+export default function DendaPetugas () {
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [confirmData, setConfirmData] = useState(null)
-
-  const [tab, setTab] = useState('verifikasi')
+  const [tab, setTab] = useState('belum')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const limit = 10
 
-  const fetchData = async () => {
+  const [confirmId, setConfirmId] = useState(null)
+
+  const fetchDenda = async () => {
     setLoading(true)
     try {
-      const res = await api.get('/peminjaman')
+      const res = await api.get('/denda')
       setData(res.data.data)
     } catch {
-      setError('Gagal mengambil data peminjaman')
+      alert('Gagal mengambil data denda')
     }
     setLoading(false)
   }
 
   useEffect(() => {
-    fetchData()
+    fetchDenda()
   }, [])
 
-  const updateStatus = async () => {
+  const bayarDenda = async () => {
     try {
-      await api.patch(`/peminjaman/${confirmData.id}/status`, {
-        status: confirmData.status
-      })
-      setConfirmData(null)
-      fetchData()
-    } catch {
-      alert('Gagal mengubah status')
+      await api.put(`/denda/${confirmId}/bayar`)
+      setConfirmId(null)
+      fetchDenda()
+    } catch (err) {
+      alert(err.response?.data?.message || 'Gagal membayar denda')
     }
   }
 
+  /* TAB + SEARCH */
   const filteredData = useMemo(() => {
     const byTab =
-      tab === 'verifikasi'
-        ? data.filter(d => d.status === 'menunggu')
-        : data.filter(d => d.status !== 'menunggu')
+      tab === 'belum'
+        ? data.filter(d => d.status_bayar === 'belum_bayar')
+        : data.filter(d => d.status_bayar !== 'belum_bayar')
 
     return byTab.filter(
       d =>
@@ -65,24 +63,24 @@ export default function VerifikasiPeminjaman () {
       {/* HEADER */}
       <div>
         <h1 className='text-xl md:text-2xl font-semibold text-slate-800'>
-          Verifikasi Peminjaman
+          Data Denda
         </h1>
         <p className='text-sm text-slate-500'>
-          Kelola persetujuan dan histori peminjaman alat
+          Kelola pembayaran denda keterlambatan peminjaman
         </p>
       </div>
 
       {/* TAB */}
       <div className='flex gap-2 border-b border-slate-200'>
         <button
-          onClick={() => setTab('verifikasi')}
+          onClick={() => setTab('belum')}
           className={`px-4 py-2 text-sm font-medium border-b-2 ${
-            tab === 'verifikasi'
+            tab === 'belum'
               ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
-          Verifikasi
+          Belum Lunas
         </button>
         <button
           onClick={() => setTab('histori')}
@@ -97,20 +95,12 @@ export default function VerifikasiPeminjaman () {
       </div>
 
       {/* SEARCH */}
-      <div className='flex justify-between items-center'>
-        <input
-          placeholder='Cari peminjam / alat...'
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className='w-full md:w-72 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500'
-        />
-      </div>
-
-      {error && (
-        <div className='rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700'>
-          {error}
-        </div>
-      )}
+      <input
+        placeholder='Cari peminjam / alat...'
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        className='w-full md:w-72 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500'
+      />
 
       {/* TABLE */}
       <div className='bg-white rounded-xl border border-slate-200 overflow-x-auto'>
@@ -119,10 +109,8 @@ export default function VerifikasiPeminjaman () {
             <tr>
               <th className='px-4 py-3 text-left font-medium'>Peminjam</th>
               <th className='px-4 py-3 text-left font-medium'>Alat</th>
-              <th className='px-4 py-3 text-left font-medium'>Tgl Pinjam</th>
-              <th className='px-4 py-3 text-left font-medium'>
-                Rencana Kembali
-              </th>
+              <th className='px-4 py-3 text-left font-medium'>Total Denda</th>
+              <th className='px-4 py-3 text-left font-medium'>Terlambat</th>
               <th className='px-4 py-3 text-left font-medium'>Status</th>
               <th className='px-4 py-3 text-left font-medium'>Aksi</th>
             </tr>
@@ -147,54 +135,35 @@ export default function VerifikasiPeminjaman () {
                 </td>
               </tr>
             ) : (
-              paginatedData.map(p => (
-                <tr
-                  key={p.id_peminjaman}
-                  className='border-t hover:bg-slate-50'
-                >
-                  <td className='px-4 py-3'>{p.peminjam}</td>
-                  <td className='px-4 py-3'>{p.alat}</td>
-                  <td className='px-4 py-3'>{p.tgl_pinjam}</td>
-                  <td className='px-4 py-3'>{p.tgl_rencana_kembali}</td>
+              paginatedData.map(d => (
+                <tr key={d.id_denda} className='border-t hover:bg-slate-50'>
+                  <td className='px-4 py-3'>{d.peminjam}</td>
+                  <td className='px-4 py-3'>{d.alat}</td>
+                  <td className='px-4 py-3 font-medium'>
+                    Rp {d.total_denda.toLocaleString('id-ID')}
+                  </td>
+                  <td className='px-4 py-3'>{d.hari_terlambat} hari</td>
                   <td className='px-4 py-3'>
                     <span
                       className={`rounded-full px-3 py-1 text-xs font-medium ${
-                        p.status === 'menunggu'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : p.status === 'disetujui'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-700'
+                        d.status_bayar === 'belum_bayar'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-green-100 text-green-700'
                       }`}
                     >
-                      {p.status}
+                      {d.status_bayar === 'belum_bayar'
+                        ? 'Belum Lunas'
+                        : 'Lunas'}
                     </span>
                   </td>
-                  <td className='px-4 py-3 space-x-3'>
-                    {p.status === 'menunggu' ? (
-                      <>
-                        <button
-                          onClick={() =>
-                            setConfirmData({
-                              id: p.id_peminjaman,
-                              status: 'disetujui'
-                            })
-                          }
-                          className='text-green-600 hover:underline text-xs'
-                        >
-                          Setujui
-                        </button>
-                        <button
-                          onClick={() =>
-                            setConfirmData({
-                              id: p.id_peminjaman,
-                              status: 'ditolak'
-                            })
-                          }
-                          className='text-red-600 hover:underline text-xs'
-                        >
-                          Tolak
-                        </button>
-                      </>
+                  <td className='px-4 py-3'>
+                    {d.status_bayar === 'belum_bayar' ? (
+                      <button
+                        onClick={() => setConfirmId(d.id_denda)}
+                        className='text-blue-600 hover:underline text-xs font-medium'
+                      >
+                        Tandai Lunas
+                      </button>
                     ) : (
                       <span className='text-xs text-slate-400'>Selesai</span>
                     )}
@@ -230,29 +199,28 @@ export default function VerifikasiPeminjaman () {
       )}
 
       {/* MODAL */}
-      {confirmData && (
+      {confirmId && (
         <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/40'>
           <div className='bg-white rounded-xl p-6 w-full max-w-sm'>
             <h3 className='text-sm font-semibold text-slate-800 mb-2'>
-              Konfirmasi
+              Konfirmasi Pembayaran
             </h3>
             <p className='text-sm text-slate-600 mb-4'>
-              Yakin ingin{' '}
-              <span className='font-medium'>{confirmData.status}</span>{' '}
-              peminjaman ini?
+              Tandai denda ini sebagai{' '}
+              <span className='font-medium'>LUNAS</span>?
             </p>
             <div className='flex justify-end gap-2'>
               <button
-                onClick={() => setConfirmData(null)}
+                onClick={() => setConfirmId(null)}
                 className='rounded-lg bg-slate-200 px-4 py-2 text-sm'
               >
                 Batal
               </button>
               <button
-                onClick={updateStatus}
+                onClick={bayarDenda}
                 className='rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700'
               >
-                Ya, Lanjutkan
+                Ya, Lunas
               </button>
             </div>
           </div>

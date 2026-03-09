@@ -3,7 +3,6 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 import Login from "./pages/auth/Login";
-import Dashboard from "./pages/dashboard/Dashboard";
 import MainLayout from "./layouts/MainLayout";
 import DashboardAdmin from "./pages/admin/DashboardAdmin";
 import Users from "./pages/admin/Users";
@@ -11,11 +10,13 @@ import Alat from "./pages/admin/Alat";
 import Kategori from "./pages/admin/Kategori";
 import DashboardPetugas from "./pages/petugas/DashboardPetugas";
 import VerifikasiPeminjaman from "./pages/petugas/VerifikasiPeminjaman";
-import PengembalianPetugas from "./pages/petugas/PengembalianPetugas";
 import DashboardPeminjam from "./pages/peminjam/DashboardPeminjam";
 import DaftarAlat from "./pages/peminjam/DaftarAlat";
 import AjukanPeminjaman from "./pages/peminjam/AjukanPeminjaman";
 import PengembalianPeminjam from "./pages/peminjam/PengembalianPeminjam";
+import VerifikasiPengembalian from "./pages/petugas/VerifikasiPengembalian";
+import DendaPetugas from "./pages/petugas/DendaPetugas";
+import DetailAlat from "./pages/peminjam/DetailAlat";
 
 export default function App() {
   return (
@@ -51,7 +52,8 @@ export default function App() {
           >
             <Route index element={<DashboardPetugas />} />
             <Route path="verifikasi" element={<VerifikasiPeminjaman />} />
-            <Route path="pengembalian" element={<PengembalianPetugas />} />
+            <Route path="pengembalian" element={<VerifikasiPengembalian />} />
+            <Route path="denda" element={<DendaPetugas />} />
           </Route>
 
           {/* PEMINJAM */}
@@ -67,6 +69,7 @@ export default function App() {
             <Route path="alat" element={<DaftarAlat />} />
             <Route path="pinjam" element={<AjukanPeminjaman />} />
             <Route path="kembali" element={<PengembalianPeminjam />} />
+            <Route path="/peminjam/detail/:id" element={<DetailAlat />} />
           </Route>
         </Routes>
       </BrowserRouter>

@@ -40,7 +40,7 @@ exports.login = async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    res.json({
+   res.json({
       message: "Login berhasil",
       token,
       user: {
@@ -48,8 +48,10 @@ exports.login = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        force_password_change: user.force_password_change,
       },
     });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Terjadi kesalahan server" });
