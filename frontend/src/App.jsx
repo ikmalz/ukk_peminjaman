@@ -17,6 +17,7 @@ import PengembalianPeminjam from "./pages/peminjam/PengembalianPeminjam";
 import VerifikasiPengembalian from "./pages/petugas/VerifikasiPengembalian";
 import DendaPetugas from "./pages/petugas/DendaPetugas";
 import DetailAlat from "./pages/peminjam/DetailAlat";
+import AlatUnit from "./pages/admin/AlatUnit";
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="users" element={<Users />} />
             <Route path="alat" element={<Alat />} />
             <Route path="kategori" element={<Kategori />} />
+            <Route path="/admin/alat/:id/unit" element={<AlatUnit />} />
           </Route>
 
           {/* PETUGAS */}

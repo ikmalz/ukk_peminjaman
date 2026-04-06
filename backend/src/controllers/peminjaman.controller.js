@@ -4,99 +4,96 @@ const logAktivitas = require ('../utils/logAktivitas');
 exports.createPeminjaman = async (req, res) => {
   const id_user = req.user.id_user;
 
-  const {
-    id_alat,
-    tgl_pinjam,
-    tgl_rencana_kembali,
-    jumlah
-  } = req.body;
+  const {id_alat, tgl_pinjam, tgl_rencana_kembali, jumlah} = req.body;
 
   if (!id_alat || !tgl_pinjam || !tgl_rencana_kembali || !jumlah) {
-    return res.status(400).json({
-      message: 'Data peminjaman wajib diisi'
+    return res.status (400).json ({
+      message: 'Data peminjaman wajib diisi',
     });
   }
 
   if (jumlah <= 0) {
-    return res.status(400).json({
-      message: 'Jumlah tidak valid'
+    return res.status (400).json ({
+      message: 'Jumlah tidak valid',
     });
   }
 
-  if (new Date(tgl_rencana_kembali) < new Date(tgl_pinjam)) {
-    return res.status(400).json({
-      message: 'Tanggal kembali tidak valid'
+  if (new Date (tgl_rencana_kembali) < new Date (tgl_pinjam)) {
+    return res.status (400).json ({
+      message: 'Tanggal kembali tidak valid',
     });
   }
 
-  const jatuhTempo = new Date(tgl_rencana_kembali);
+  const jatuhTempo = new Date (tgl_rencana_kembali);
 
   try {
-    const cekDenda = await db.query(`
+    const cekDenda = await db.query (
+      `
       SELECT 1
       FROM denda d
       JOIN pengembalian pg ON d.id_pengembalian = pg.id_pengembalian
       JOIN peminjaman p ON pg.id_peminjaman = p.id_peminjaman
       WHERE p.id_user = $1
       AND d.status_bayar = 'belum_bayar'
-    `, [id_user]);
+    `,
+      [id_user]
+    );
 
     if (cekDenda.rows.length > 0) {
-      return res.status(403).json({
-        message: 'Anda memiliki denda yang belum dibayar'
+      return res.status (403).json ({
+        message: 'Anda memiliki denda yang belum dibayar',
       });
     }
 
-    // ========================
-    // CEK ALAT
-    // ========================
-    const cekAlat = await db.query(
+    const cekAlat = await db.query (
       'SELECT stok, status_aktif FROM alat WHERE id_alat = $1',
       [id_alat]
     );
 
     if (cekAlat.rows.length === 0) {
-      return res.status(404).json({ message: 'Alat tidak ditemukan' });
+      return res.status (404).json ({message: 'Alat tidak ditemukan'});
     }
 
     const alat = cekAlat.rows[0];
 
     if (alat.status_aktif !== 1) {
-      return res.status(400).json({ message: 'Alat tidak aktif' });
+      return res.status (400).json ({message: 'Alat tidak aktif'});
     }
 
     if (alat.stok < jumlah) {
-      return res.status(400).json({ message: 'Stok alat tidak mencukupi' });
+      return res.status (400).json ({message: 'Stok alat tidak mencukupi'});
     }
 
-    const insert = await db.query(`
+    const insert = await db.query (
+      `
       INSERT INTO peminjaman
       (id_user, id_alat, tgl_pinjam, tgl_rencana_kembali, tgl_jatuh_tempo, jumlah, status)
       VALUES ($1,$2,$3,$4,$5,$6,'menunggu')
       RETURNING id_peminjaman
-    `, [
-      id_user,
-      id_alat,
-      tgl_pinjam,
-      tgl_rencana_kembali,
-      jatuhTempo,
-      jumlah
-    ]);
+    `,
+      [id_user, id_alat, tgl_pinjam, tgl_rencana_kembali, jatuhTempo, jumlah]
+    );
 
-    await logAktivitas({
+    console.log ('CREATE PEMINJAMAN:', {
+      id_alat,
+      jumlah,
+      id_peminjaman: insert.rows[0].id_peminjaman,
+    });
+
+    await logAktivitas ({
       id_user,
       aktivitas: 'Mengajukan peminjaman alat',
-      id_peminjaman: insert.rows[0].id_peminjaman
+      id_peminjaman: insert.rows[0].id_peminjaman,
     });
 
-    res.json({
+    res.json ({
       message: 'Peminjaman berhasil diajukan',
-      id_peminjaman: insert.rows[0].id_peminjaman
+      id_peminjaman: insert.rows[0].id_peminjaman,
     });
   } catch (err) {
-    console.error('CREATE PEMINJAMAN ERROR:', err);
-    res.status(500).json({
-      message: 'Gagal mengajukan peminjaman'
+    console.error ('CREATE PEMINJAMAN ERROR:', err);
+    res.status (500).json ({
+      message: 'Gagal mengajukan peminjaman',
     });
   }
 };
@@ -179,7 +176,7 @@ exports.updateStatusPeminjaman = async (req, res) => {
     await client.query ('BEGIN');
 
     const cek = await client.query (
-      'SELECT id_alat, status FROM peminjaman WHERE id_peminjaman = $1',
+      'SELECT id_alat, status, jumlah FROM peminjaman WHERE id_peminjaman = $1 FOR UPDATE',
       [id]
     );
 
@@ -206,8 +203,8 @@ exports.updateStatusPeminjaman = async (req, res) => {
 
     if (status === 'disetujui') {
       await client.query (
-        'UPDATE alat SET stok = stok - 1 WHERE id_alat = $1',
-        [peminjaman.id_alat]
+        'UPDATE alat SET stok = stok - $1 WHERE id_alat = $2',
+        [peminjaman.jumlah, peminjaman.id_alat]
       );
     }
 
@@ -235,10 +232,10 @@ exports.getPeminjamanAktifUser = async (req, res) => {
   try {
     const result = await db.query (
       `
-      SELECT id_alat
-      FROM peminjaman
-      WHERE id_user = $1
-      AND status IN ('menunggu','disetujui','dipinjam')
+    SELECT id_alat, status
+    FROM peminjaman
+    WHERE id_user = $1
+    AND status IN ('menunggu','disetujui','dipinjam')
       `,
       [id_user]
     );

@@ -73,6 +73,18 @@ exports.createAlat = async (req, res) => {
       ]
     );
 
+    const id_alat = result.rows[0].id_alat;
+
+    for (let i = 1; i <= stok; i++) {
+      const kode_unit = `${kode_alat}-${String (i).padStart (3, '0')}`;
+
+      await db.query (
+        `INSERT INTO alat_unit (id_alat, kode_unit)
+     VALUES ($1, $2)`,
+        [id_alat, kode_unit]
+      );
+    }
+
     res.json ({
       message: 'Alat berhasil ditambahkan',
       id_alat: result.rows[0].id_alat,
@@ -261,4 +273,15 @@ ORDER BY a.name
     console.error (err);
     res.status (500).json ({message: 'Gagal mengambil alat tersedia'});
   }
+};
+
+exports.getUnitByAlat = async (req, res) => {
+  const {id} = req.params;
+
+  const result = await db.query (
+    `SELECT * FROM alat_unit WHERE id_alat = $1 ORDER BY kode_unit`,
+    [id]
+  );
+
+  res.json (result.rows);
 };

@@ -1,6 +1,23 @@
 import { useAuth } from '../context/AuthContext'
 import { useLocation, useNavigate } from 'react-router-dom'
 
+const pageTitles = {
+  '/users': 'Users',
+  '/alat': 'Alat',
+  '/kategori': 'Kategori',
+  '/verifikasi': 'Verifikasi',
+  '/pengembalian': 'Pengembalian',
+  '/denda': 'Denda'
+}
+
+const initials = (name = '') =>
+  name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
+
 export default function Navbar ({ onMenuClick }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -11,40 +28,61 @@ export default function Navbar ({ onMenuClick }) {
     navigate('/login')
   }
 
-  const getTitle = () => {
-    if (location.pathname.includes('/users')) return 'Manajemen User'
-    if (location.pathname.includes('/alat')) return 'Manajemen Alat'
-    if (location.pathname.includes('/kategori')) return 'Manajemen Kategori'
-    if (location.pathname.includes('/verifikasi'))
-      return 'Verifikasi Peminjaman'
-    if (location.pathname.includes('/pengembalian')) return 'Pengembalian'
-    if (location.pathname.includes('/denda')) return 'Manajemen Denda'
-    return 'Dashboard'
-  }
+  const title =
+    Object.entries(pageTitles).find(([key]) =>
+      location.pathname.includes(key)
+    )?.[1] ?? 'Dashboard'
 
   return (
-    <header className='sticky top-0 z-30 bg-white border-b px-6 py-3 flex justify-between items-center'>
+    <header className='sticky top-0 z-30 flex h-[52px] items-center justify-between border-b border-gray-200 bg-white px-5'>
+      {/* Left */}
       <div className='flex items-center gap-3'>
         <button
           onClick={onMenuClick}
-          className='md:hidden text-slate-600 text-xl'
+          className='flex items-center justify-center rounded-md p-1.5 text-gray-400 hover:bg-gray-100 transition md:hidden'
+          aria-label='Menu'
         >
-          ☰
+          <svg
+            width='18'
+            height='18'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
+            viewBox='0 0 24 24'
+          >
+            <line x1='3' y1='6' x2='21' y2='6' />
+            <line x1='3' y1='12' x2='21' y2='12' />
+            <line x1='3' y1='18' x2='21' y2='18' />
+          </svg>
         </button>
-        <h2 className='font-semibold text-gray-800'>{getTitle()}</h2>
+        <span className='text-sm font-semibold tracking-tight text-gray-900'>
+          {title}
+        </span>
       </div>
 
-      <div className='flex items-center gap-4'>
-        <div className='text-right hidden sm:block'>
-          <p className='text-sm font-medium text-slate-700'>{user?.name}</p>
-          <p className='text-xs text-slate-500 capitalize'>{user?.role}</p>
+      {/* Right */}
+      <div className='flex items-center gap-3'>
+        {/* User */}
+        <div className='flex items-center gap-2.5'>
+          <div className='flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-[10px] font-bold text-blue-600'>
+            {initials(user?.name)}
+          </div>
+          <div className='hidden sm:block leading-tight text-right'>
+            <p className='text-[13px] font-semibold text-gray-900'>
+              {user?.name}
+            </p>
+            <p className='text-[11px] capitalize text-gray-400'>{user?.role}</p>
+          </div>
         </div>
+
+        <div className='h-5 w-px bg-gray-200' />
 
         <button
           onClick={handleLogout}
-          className='rounded-md bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 transition'
+          className='rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-500 hover:border-red-200 hover:bg-red-50 hover:text-red-500 transition'
         >
-          Logout
+          Keluar
         </button>
       </div>
     </header>

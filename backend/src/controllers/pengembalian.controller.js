@@ -144,6 +144,9 @@ exports.verifikasiPengembalian = async (req, res) => {
   try {
     await client.query ('BEGIN');
 
+    console.log ('=== DEBUG VERIFIKASI START ===');
+    console.log ('ID PENGEMBALIAN:', id);
+
     const cek = await client.query (
       `
       SELECT 
@@ -151,31 +154,93 @@ exports.verifikasiPengembalian = async (req, res) => {
         pg.tgl_kembali,
         p.id_alat,
         p.id_peminjaman,
+        p.jumlah,
         p.tgl_jatuh_tempo
       FROM pengembalian pg
       JOIN peminjaman p ON pg.id_peminjaman = p.id_peminjaman
       WHERE pg.id_pengembalian = $1
+      FOR UPDATE
       `,
       [id]
     );
 
     if (cek.rows.length === 0) {
       await client.query ('ROLLBACK');
-      return res.status (404).json ({
-        message: 'Data pengembalian tidak ditemukan',
-      });
+      return res.status (404).json ({message: 'Data tidak ditemukan'});
     }
 
     const data = cek.rows[0];
+    const id_alat = data.id_alat;
 
-    if (data.status_verifikasi === 'selesai') {
+    console.log ('DATA:', data);
+
+    if (data.status_verifikasi !== 'menunggu') {
       await client.query ('ROLLBACK');
       return res.status (400).json ({
         message: 'Sudah diverifikasi sebelumnya',
       });
     }
 
+    const updateStatus = await client.query (
+      `
+      UPDATE pengembalian
+      SET status_verifikasi = 'selesai'
+      WHERE id_pengembalian = $1
+      AND status_verifikasi = 'menunggu'
+      RETURNING *
+      `,
+      [id]
+    );
+
+    if (updateStatus.rowCount === 0) {
+      await client.query ('ROLLBACK');
+      return res.status (400).json ({
+        message: 'Sudah diproses sebelumnya',
+      });
+    }
+
+    const alatLock = await client.query (
+      `SELECT stok FROM alat WHERE id_alat = $1 FOR UPDATE`,
+      [id_alat]
+    );
+
+    const stokSebelum = alatLock.rows[0].stok;
+
+    console.log ('STOK SEBELUM:', stokSebelum);
+    console.log ('JUMLAH DIKEMBALIKAN:', data.jumlah);
+
+    let stokBaru;
+
+    const cekFinal = await client.query (
+      `SELECT status_verifikasi FROM pengembalian WHERE id_pengembalian = $1`,
+      [id]
+    );
+
+    if (cekFinal.rows[0].status_verifikasi !== 'selesai') {
+      throw new Error ('Status tidak valid saat update stok');
+    }
+
+    if (kondisi_final === 'normal' || kondisi_final === 'rusak_ringan') {
+      await client.query (
+        `UPDATE alat SET stok = stok + $1 WHERE id_alat = $2`,
+        [data.jumlah, id_alat]
+      );
+    } else if (kondisi_final === 'rusak_berat') {
+      await client.query (
+        `UPDATE alat SET stok = stok + $1, status_aktif = 0 WHERE id_alat = $2`,
+        [data.jumlah, id_alat]
+      );
+    } else if (kondisi_final === 'hilang') {
+      await client.query (
+        `UPDATE alat SET stok = stok - $1 WHERE id_alat = $2`,
+        [data.jumlah, id_alat]
+      );
+    }
+
+    console.log ('STOK SESUDAH:', stokBaru);
+
     let hariTerlambat = 0;
+    const tarif = 5000;
 
     if (data.tgl_jatuh_tempo) {
       const jatuhTempo = new Date (data.tgl_jatuh_tempo);
@@ -188,98 +253,44 @@ exports.verifikasiPengembalian = async (req, res) => {
     }
 
     let totalDenda = 0;
-    const tarif = 5000;
 
-    if (hariTerlambat > 0) {
-      totalDenda += hariTerlambat * tarif;
-    }
-
+    if (hariTerlambat > 0) totalDenda += hariTerlambat * tarif;
     if (kondisi_final === 'rusak_ringan') totalDenda += 20000;
     if (kondisi_final === 'rusak_berat') totalDenda += 50000;
     if (kondisi_final === 'hilang') totalDenda += 100000;
 
-    const id_alat = data.id_alat;
-    if (!id_alat) {
-      throw new Error ('ID alat tidak ditemukan');
-    }
-
-    if (kondisi_final === 'normal') {
+    if (totalDenda > 0) {
       await client.query (
-        `UPDATE alat SET stok = stok + 1 WHERE id_alat = $1`,
-        [id_alat]
+        `
+        INSERT INTO denda
+        (id_pengembalian, hari_terlambat, tarif_per_hari, total_denda, status_bayar)
+        VALUES ($1,$2,$3,$4,'belum_bayar')
+        `,
+        [id, hariTerlambat, tarif, totalDenda]
       );
     }
 
-    if (kondisi_final === 'rusak_ringan') {
-      await client.query (
-        `UPDATE alat SET stok = stok + 1 WHERE id_alat = $1`,
-        [id_alat]
-      );
-    }
-
-    if (kondisi_final === 'rusak_berat') {
-      await client.query (
-        `UPDATE alat SET status_aktif = 0 WHERE id_alat = $1`,
-        [id_alat]
-      );
-    }
-
-    if (kondisi_final === 'hilang') {
-      await client.query (
-        `UPDATE alat 
-     SET stok = stok - 1 
-     WHERE id_alat = $1`,
-        [id_alat]
-      );
-
-      await client.query (
-        `UPDATE alat 
-     SET status_aktif = 0 
-     WHERE id_alat = $1 AND stok <= 0`,
-        [id_alat]
-      );
-    }
-
-    await client.query (
-      `UPDATE pengembalian SET status_verifikasi = 'selesai' WHERE id_pengembalian = $1`,
-      [id]
-    );
-
+    // ✅ UPDATE PEMINJAMAN
     await client.query (
       `UPDATE peminjaman SET status = 'selesai' WHERE id_peminjaman = $1`,
       [data.id_peminjaman]
     );
 
-    // ========================
-    // INSERT DENDA
-    // ========================
-    if (totalDenda > 0) {
-      try {
-        await client.query (
-          `
-      INSERT INTO denda
-      (id_pengembalian, hari_terlambat, tarif_per_hari, total_denda, status_bayar)
-      VALUES ($1,$2,$3,$4,'belum_bayar')
-      `,
-          [id, hariTerlambat, tarif, totalDenda]
-        );
-      } catch (err) {
-        console.log ('DENDA ERROR:', err.message);
-      }
-    }
-
     await client.query ('COMMIT');
+
+    console.log ('=== DEBUG VERIFIKASI END ===');
 
     res.json ({
       message: 'Pengembalian berhasil diverifikasi',
-      hariTerlambat,
       totalDenda,
+      hariTerlambat,
     });
   } catch (err) {
     await client.query ('ROLLBACK');
     console.error ('ERROR VERIFIKASI:', err);
+
     res.status (500).json ({
-      message: 'Gagal verifikasi pengembalian',
+      message: 'Gagal verifikasi',
     });
   } finally {
     client.release ();

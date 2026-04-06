@@ -2,115 +2,251 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 
+const inputCls =
+  'w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+
+function Field ({ label, children }) {
+  return (
+    <div className='flex flex-col gap-1.5'>
+      <label className='text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
+        {label}
+      </label>
+      {children}
+    </div>
+  )
+}
+
 export default function Login () {
   const { login, loading } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState('')
-  const user = JSON.parse(localStorage.getItem('user'))
 
   const submit = async e => {
     e.preventDefault()
     setError('')
-
     try {
       await login(email, password)
-
       const user = JSON.parse(localStorage.getItem('user'))
-
       if (user.role === 'admin') navigate('/admin')
       else if (user.role === 'petugas') navigate('/petugas')
       else navigate('/peminjam')
     } catch (err) {
-      if (err.response) {
-        setError(err.response.data.message)
-      } else {
-        setError('Terjadi kesalahan koneksi')
-      }
+      setError(err.response?.data?.message || 'Terjadi kesalahan koneksi')
     }
   }
 
   return (
-    <div className='min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 px-4'>
-      <div className='w-full max-w-md'>
-        <form
-          onSubmit={submit}
-          className='bg-white rounded-2xl shadow-lg border border-slate-200 p-8'
-        >
-          {/* Header */}
-          <div className='mb-6 text-center'>
-            <h1 className='text-2xl font-semibold text-slate-800'>
-              Sistem Peminjaman Alat
+    <div className='flex min-h-screen'>
+      {/* ── LEFT PANEL ── */}
+      <div className='hidden md:flex md:w-1/2 flex-col justify-between bg-[#0f1e40] px-12 py-10 relative overflow-hidden'>
+        {/* subtle dot grid */}
+        <div
+          className='absolute inset-0 opacity-[0.04]'
+          style={{
+            backgroundImage:
+              'radial-gradient(circle, white 1px, transparent 1px)',
+            backgroundSize: '28px 28px'
+          }}
+        />
+
+        {/* top glow */}
+        <div className='absolute -top-32 -right-32 h-72 w-72 rounded-full bg-blue-600/20 blur-3xl' />
+
+        {/* Logo */}
+        <div className='relative flex items-center gap-2.5 z-10'>
+          <div className='flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 border border-white/10'>
+            <svg
+              width='16'
+              height='16'
+              fill='none'
+              stroke='rgba(255,255,255,.8)'
+              strokeWidth='2'
+              strokeLinecap='round'
+              viewBox='0 0 24 24'
+            >
+              <path d='M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z' />
+            </svg>
+          </div>
+          <div>
+            <p className='text-[13px] font-bold text-white tracking-tight'>
+              SiPinjam
+            </p>
+            <p className='text-[11px] text-white/30'>Sistem Peminjaman Alat</p>
+          </div>
+        </div>
+
+        {/* Center text */}
+        <div className='relative z-10 space-y-4'>
+       
+
+          <h2 className='text-2xl font-bold text-white leading-snug tracking-tight'>
+            Platform peminjaman
+            <br />
+            <span className='text-white/30'>yang efisien & modern</span>
+          </h2>
+          <p className='text-[13px] text-white/35 leading-relaxed max-w-xs'>
+            Digunakan oleh admin, petugas, dan peminjam dalam satu sistem
+            terintegrasi.
+          </p>
+        </div>
+
+        {/* Footer */}
+        <p className='relative z-10 text-[11px] text-white/20'>
+          © {new Date().getFullYear()} SiPinjam · UKK 2025/2026
+        </p>
+      </div>
+
+      {/* ── RIGHT PANEL ── */}
+      <div className='flex w-full md:w-1/2 items-center justify-center bg-gray-50 px-6 py-12'>
+        <div className='w-full max-w-sm'>
+          {/* Mobile logo */}
+          <div className='mb-8 flex items-center gap-2.5 md:hidden'>
+            <div className='flex h-8 w-8 items-center justify-center rounded-lg bg-[#0f1e40]'>
+              <svg
+                width='14'
+                height='14'
+                fill='none'
+                stroke='white'
+                strokeWidth='2'
+                strokeLinecap='round'
+                viewBox='0 0 24 24'
+              >
+                <path d='M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z' />
+              </svg>
+            </div>
+            <p className='text-[13px] font-bold text-gray-900'>SiPinjam</p>
+          </div>
+
+          {/* Heading */}
+          <div className='mb-7'>
+            <h1 className='text-[22px] font-bold tracking-tight text-gray-900'>
+              Selamat datang
             </h1>
-            <p className='text-sm text-slate-500 mt-1'>
-              Silakan login untuk melanjutkan
+            <p className='mt-1 text-sm text-gray-400'>
+              Masuk ke akun kamu untuk melanjutkan
             </p>
           </div>
 
-          {/* Error */}
-          {error && (
-            <div className='mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700'>
-              {error}
-            </div>
-          )}
+          <form onSubmit={submit} className='space-y-4'>
+            {/* Error */}
+            {error && (
+              <div className='flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3.5 py-2.5 text-xs text-red-600'>
+                <svg
+                  width='13'
+                  height='13'
+                  fill='none'
+                  stroke='currentColor'
+                  strokeWidth='2'
+                  viewBox='0 0 24 24'
+                >
+                  <circle cx='12' cy='12' r='10' />
+                  <line x1='12' y1='8' x2='12' y2='12' />
+                  <line x1='12' y1='16' x2='12.01' y2='16' />
+                </svg>
+                {error}
+              </div>
+            )}
 
-          {/* Email */}
-          <div className='mb-4'>
-            <label className='block text-sm font-medium text-slate-700 mb-1'>
-              Email
-            </label>
-            <input
-              type='email'
-              placeholder='contoh@email.com'
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              className='
-              w-full rounded-lg border border-slate-300
-              px-3 py-2 text-sm
-              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-            '
-            />
-          </div>
+            {/* Email */}
+            <Field label='Email'>
+              <input
+                type='email'
+                required
+                autoComplete='email'
+                placeholder='contoh@email.com'
+                className={inputCls}
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+              />
+            </Field>
 
-          {/* Password */}
-          <div className='mb-6'>
-            <label className='block text-sm font-medium text-slate-700 mb-1'>
-              Password
-            </label>
-            <input
-              type='password'
-              placeholder='••••••••'
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              className='
-              w-full rounded-lg border border-slate-300
-              px-3 py-2 text-sm
-              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-            '
-            />
-          </div>
+            {/* Password */}
+            <Field label='Password'>
+              <div className='relative'>
+                <input
+                  type={showPw ? 'text' : 'password'}
+                  required
+                  autoComplete='current-password'
+                  placeholder='••••••••'
+                  className={inputCls + ' pr-10'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                />
+                <button
+                  type='button'
+                  tabIndex={-1}
+                  onClick={() => setShowPw(v => !v)}
+                  className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 transition'
+                >
+                  {showPw ? (
+                    <svg
+                      width='15'
+                      height='15'
+                      fill='none'
+                      stroke='currentColor'
+                      strokeWidth='2'
+                      viewBox='0 0 24 24'
+                    >
+                      <path d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94' />
+                      <path d='M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19' />
+                      <line x1='1' y1='1' x2='23' y2='23' />
+                    </svg>
+                  ) : (
+                    <svg
+                      width='15'
+                      height='15'
+                      fill='none'
+                      stroke='currentColor'
+                      strokeWidth='2'
+                      viewBox='0 0 24 24'
+                    >
+                      <path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z' />
+                      <circle cx='12' cy='12' r='3' />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </Field>
 
-          {/* Button */}
-          <button
-            disabled={loading}
-            className='
-            w-full rounded-lg bg-blue-600 px-4 py-2.5
-            text-sm font-medium text-white
-            hover:bg-blue-700
-            transition disabled:opacity-60 disabled:cursor-not-allowed
-          '
-          >
-            {loading ? 'Memproses...' : 'Login'}
-          </button>
-        </form>
+            {/* Submit */}
+            <button
+              type='submit'
+              disabled={loading}
+              className='mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[#0f1e40] py-2.5 text-sm font-semibold text-white transition hover:bg-[#1a3060] disabled:cursor-not-allowed disabled:opacity-50'
+            >
+              {loading && (
+                <svg
+                  className='h-4 w-4 animate-spin'
+                  fill='none'
+                  viewBox='0 0 24 24'
+                >
+                  <circle
+                    className='opacity-25'
+                    cx='12'
+                    cy='12'
+                    r='10'
+                    stroke='currentColor'
+                    strokeWidth='4'
+                  />
+                  <path
+                    className='opacity-75'
+                    fill='currentColor'
+                    d='M4 12a8 8 0 018-8v8z'
+                  />
+                </svg>
+              )}
+              {loading ? 'Memproses...' : 'Masuk'}
+            </button>
+          </form>
 
-        {/* Footer */}
-        <p className='mt-6 text-center text-xs text-slate-500'>
-          © {new Date().getFullYear()} Aplikasi Peminjaman Alat
-        </p>
+          <p className='mt-8 text-center text-[11px] text-gray-300'>
+            © {new Date().getFullYear()} Aplikasi Peminjaman Alat · UKK
+            2025/2026
+          </p>
+        </div>
       </div>
     </div>
   )

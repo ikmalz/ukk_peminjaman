@@ -1,10 +1,56 @@
 import { useEffect, useState } from 'react'
 import api from '../../lib/api'
 
+const formatDate = d =>
+  new Date(d).toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  })
+
+const fmt = n => 'Rp ' + Number(n).toLocaleString('id-ID')
+
+const getStatusInfo = p => {
+  if (p.status === 'menunggu_pengembalian')
+    return {
+      label: 'Menunggu Verifikasi',
+      cls: 'border-blue-100 bg-blue-50 text-blue-600',
+      dot: 'bg-blue-400'
+    }
+  const diff = Math.ceil((new Date(p.tgl_jatuh_tempo) - new Date()) / 86400000)
+  if (diff < 0)
+    return {
+      label: `Terlambat ${Math.abs(diff)} hari`,
+      cls: 'border-red-100 bg-red-50 text-red-500',
+      dot: 'bg-red-400'
+    }
+  if (diff <= 1)
+    return {
+      label: 'Hampir Jatuh Tempo',
+      cls: 'border-amber-100 bg-amber-50 text-amber-600',
+      dot: 'bg-amber-400'
+    }
+  return {
+    label: 'Aktif',
+    cls: 'border-green-100 bg-green-50 text-green-600',
+    dot: 'bg-green-500'
+  }
+}
+
+const kondisiOpts = [
+  { value: 'normal', label: 'Normal' },
+  { value: 'rusak_ringan', label: 'Rusak Ringan' },
+  { value: 'rusak_berat', label: 'Rusak Berat' },
+  { value: 'hilang', label: 'Hilang' }
+]
+
+const inputCls =
+  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+
 export default function PengembalianPeminjam () {
   const [data, setData] = useState([])
-  const [form, setForm] = useState({})
   const [denda, setDenda] = useState([])
+  const [form, setForm] = useState({})
   const [modal, setModal] = useState({ show: false, type: '', message: '' })
 
   const fetchData = async () => {
@@ -27,9 +73,8 @@ export default function PengembalianPeminjam () {
     fetchDenda()
   }, [])
 
-  const handleChange = (id, field, value) => {
+  const handleChange = (id, field, value) =>
     setForm(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
-  }
 
   const ajukanPengembalian = async id => {
     try {
@@ -39,7 +84,6 @@ export default function PengembalianPeminjam () {
         kondisi_laporan: form[id]?.kondisi || 'normal',
         keterangan_user: form[id]?.keterangan || ''
       })
-
       setModal({
         show: true,
         type: 'success',
@@ -56,171 +100,181 @@ export default function PengembalianPeminjam () {
     }
   }
 
-  const formatDate = d =>
-    new Date(d).toLocaleDateString('id-ID', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    })
-
-  const getStatusInfo = p => {
-    if (p.status === 'menunggu_pengembalian')
-      return { label: 'Menunggu Verifikasi', color: 'blue' }
-    const now = new Date()
-    const due = new Date(p.tgl_jatuh_tempo)
-    const diff = Math.ceil((due - now) / (1000 * 60 * 60 * 24))
-    if (diff < 0)
-      return { label: `Terlambat ${Math.abs(diff)} hari`, color: 'red' }
-    if (diff <= 1) return { label: 'Hampir Jatuh Tempo', color: 'yellow' }
-    return { label: 'Aman', color: 'green' }
-  }
-
   return (
-    <div className='space-y-8 max-w-6xl mx-auto'>
-      {/* HEADER */}
-      <div className='flex flex-col gap-1'>
-        <h1 className='text-2xl font-semibold text-slate-800'>
+    <div>
+      {/* Header */}
+      <div className='mb-6'>
+        <h1 className='text-[20px] font-bold tracking-tight text-gray-900'>
           Pengembalian Alat
         </h1>
-        <p className='text-sm text-slate-500'>
+        <p className='mt-0.5 text-sm text-gray-400'>
           Ajukan pengembalian alat yang sedang kamu pinjam
         </p>
       </div>
 
-      {/* INFO */}
-      <div className='flex items-start gap-3 rounded-xl bg-amber-50 border border-amber-200 p-4'>
-        <div className='text-amber-600 text-lg'>⚠️</div>
-        <p className='text-sm text-amber-700'>
-          Jika pengembalian melewati tanggal jatuh tempo, sistem dapat
-          memberikan denda sesuai kebijakan yang berlaku.
+      {/* Warning notice */}
+      <div className='mb-4 flex items-start gap-2.5 rounded-xl border border-amber-100 bg-amber-50 p-4'>
+        <svg
+          className='mt-0.5 shrink-0 text-amber-500'
+          width='14'
+          height='14'
+          fill='none'
+          stroke='currentColor'
+          strokeWidth='2'
+          viewBox='0 0 24 24'
+        >
+          <circle cx='12' cy='12' r='10' />
+          <line x1='12' y1='8' x2='12' y2='12' />
+          <line x1='12' y1='16' x2='12.01' y2='16' />
+        </svg>
+        <p className='text-[13px] text-amber-700 leading-relaxed'>
+          Pengembalian melewati tanggal jatuh tempo akan dikenakan denda sesuai
+          kebijakan yang berlaku.
         </p>
       </div>
 
-      {/* DENDA */}
+      {/* Denda section */}
       {denda.length > 0 && (
-        <div className='bg-white border border-red-200 rounded-2xl p-5 shadow-sm'>
-          <h2 className='text-sm font-semibold text-red-600 mb-3'>
-            Informasi Denda
-          </h2>
-
-          <div className='space-y-3'>
+        <div className='mb-4 rounded-xl border border-red-100 bg-white overflow-hidden'>
+          <div className='border-b border-red-50 bg-red-50 px-5 py-3'>
+            <span className='text-[13px] font-semibold text-red-600'>
+              Informasi Denda
+            </span>
+          </div>
+          <div className='divide-y divide-gray-50 px-5'>
             {denda.map(d => (
               <div
                 key={d.id_denda}
-                className='flex justify-between items-center border rounded-lg px-4 py-3'
+                className='flex items-center justify-between py-3.5'
               >
-                <div className='text-sm text-slate-600 space-y-1'>
-                  <p>
-                    Denda :
-                    <span className='font-semibold text-red-600 ml-1'>
-                      Rp {d.total_denda.toLocaleString('id-ID')}
-                    </span>
+                <div>
+                  <p className='text-sm font-semibold text-gray-900'>
+                    {fmt(d.total_denda)}
                   </p>
-                  <p className='text-xs text-slate-500'>
+                  <p className='text-[12px] text-gray-400'>
                     Terlambat {d.hari_terlambat} hari
                   </p>
                 </div>
-
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    d.status_bayar === 'belum_bayar'
-                      ? 'bg-red-100 text-red-700'
-                      : 'bg-emerald-100 text-emerald-700'
-                  }`}
-                >
-                  {d.status_bayar === 'belum_bayar' ? 'Belum Lunas' : 'Lunas'}
-                </span>
+                {d.status_bayar === 'belum_bayar' ? (
+                  <span className='inline-flex items-center gap-1 rounded-full border border-red-100 bg-red-50 px-2.5 py-0.5 text-[11px] font-semibold text-red-500'>
+                    <span className='h-1.5 w-1.5 rounded-full bg-red-400' />{' '}
+                    Belum Lunas
+                  </span>
+                ) : (
+                  <span className='inline-flex items-center gap-1 rounded-full border border-green-100 bg-green-50 px-2.5 py-0.5 text-[11px] font-semibold text-green-600'>
+                    <span className='h-1.5 w-1.5 rounded-full bg-green-500' />{' '}
+                    Lunas
+                  </span>
+                )}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* LIST */}
+      {/* Peminjaman list */}
       {data.length === 0 ? (
-        <div className='bg-white border border-slate-200 rounded-xl p-6 text-center text-sm text-slate-500'>
-          Tidak ada alat yang sedang dipinjam
+        <div className='rounded-xl border border-gray-200 bg-white py-14 text-center'>
+          <p className='text-sm text-gray-300'>
+            Tidak ada alat yang sedang dipinjam
+          </p>
         </div>
       ) : (
-        <div className='grid gap-6'>
+        <div className='space-y-3'>
           {data.map(p => {
             const status = getStatusInfo(p)
+            const isLate = status.label.startsWith('Terlambat')
 
             return (
               <div
                 key={p.id_peminjaman}
-                className='bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition'
+                className='rounded-xl border border-gray-200 bg-white overflow-hidden'
               >
-                {/* HEADER CARD */}
-                <div className='flex justify-between items-start gap-4'>
-                  <div className='space-y-1'>
-                    <h2 className='text-lg font-semibold text-slate-800'>
-                      {p.alat}
-                    </h2>
-
-                    <p className='text-sm text-slate-500'>
-                      Dipinjam : {formatDate(p.tgl_pinjam)}
-                    </p>
-
-                    <p className='text-sm text-slate-500'>
-                      Jatuh Tempo :
-                      <span className='ml-1 font-medium text-slate-700'>
-                        {formatDate(p.tgl_jatuh_tempo)}
+                {/* Card header */}
+                <div className='flex items-start justify-between gap-3 p-5 pb-4'>
+                  <div>
+                    <p className='font-semibold text-gray-900'>{p.alat}</p>
+                    <div className='mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[12px] text-gray-400'>
+                      <span>
+                        Dipinjam:{' '}
+                        <span className='font-medium text-gray-600'>
+                          {formatDate(p.tgl_pinjam)}
+                        </span>
                       </span>
-                    </p>
+                      <span>
+                        Jatuh tempo:{' '}
+                        <span
+                          className={`font-medium ${
+                            isLate ? 'text-red-500' : 'text-gray-600'
+                          }`}
+                        >
+                          {formatDate(p.tgl_jatuh_tempo)}
+                        </span>
+                      </span>
+                    </div>
+                    {isLate && (
+                      <p className='mt-1 text-[12px] font-semibold text-red-500'>
+                        Denda akan dihitung saat verifikasi petugas.
+                      </p>
+                    )}
                   </div>
-
                   <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      status.color === 'red'
-                        ? 'bg-red-100 text-red-700'
-                        : status.color === 'yellow'
-                        ? 'bg-yellow-100 text-yellow-700'
-                        : status.color === 'blue'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-emerald-100 text-emerald-700'
-                    }`}
+                    className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${status.cls}`}
                   >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${status.dot}`}
+                    />
                     {status.label}
                   </span>
                 </div>
 
-                {status.color === 'red' && (
-                  <div className='mt-3 text-sm text-red-600 font-medium'>
-                    Terlambat. Denda akan dihitung saat verifikasi.
-                  </div>
-                )}
-
-                {/* FORM */}
+                {/* Return form */}
                 {p.status === 'disetujui' && (
-                  <div className='mt-5 space-y-3'>
-                    <select
-                      onChange={e =>
-                        handleChange(p.id_peminjaman, 'kondisi', e.target.value)
-                      }
-                      className='w-full md:w-72 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none'
-                    >
-                      <option value='normal'>Kondisi Normal</option>
-                      <option value='rusak_ringan'>Rusak Ringan</option>
-                      <option value='rusak_berat'>Rusak Berat</option>
-                      <option value='hilang'>Hilang</option>
-                    </select>
-
-                    <textarea
-                      placeholder='Catatan tambahan (opsional)'
-                      onChange={e =>
-                        handleChange(
-                          p.id_peminjaman,
-                          'keterangan',
-                          e.target.value
-                        )
-                      }
-                      className='w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none'
-                    />
-
+                  <div className='space-y-3 border-t border-gray-100 bg-gray-50/50 px-5 py-4'>
+                    <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                      <div className='flex flex-col gap-1'>
+                        <label className='text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
+                          Kondisi Alat
+                        </label>
+                        <select
+                          className={inputCls}
+                          value={form[p.id_peminjaman]?.kondisi || 'normal'}
+                          onChange={e =>
+                            handleChange(
+                              p.id_peminjaman,
+                              'kondisi',
+                              e.target.value
+                            )
+                          }
+                        >
+                          {kondisiOpts.map(o => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className='flex flex-col gap-1'>
+                        <label className='text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
+                          Catatan
+                        </label>
+                        <input
+                          className={inputCls}
+                          placeholder='Catatan tambahan (opsional)'
+                          value={form[p.id_peminjaman]?.keterangan || ''}
+                          onChange={e =>
+                            handleChange(
+                              p.id_peminjaman,
+                              'keterangan',
+                              e.target.value
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
                     <button
                       onClick={() => ajukanPengembalian(p.id_peminjaman)}
-                      className='inline-flex items-center justify-center rounded-lg bg-blue-800 px-4 py-2 text-sm font-medium text-white hover:bg-blue-900 transition'
+                      className='rounded-lg bg-gray-900 px-4 py-2 text-xs font-semibold text-white hover:bg-gray-700 transition'
                     >
                       Ajukan Pengembalian
                     </button>
@@ -232,23 +286,47 @@ export default function PengembalianPeminjam () {
         </div>
       )}
 
-      {/* MODAL */}
+      {/* Modal */}
       {modal.show && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm'>
-          <div className='bg-white rounded-2xl p-6 w-full max-w-sm text-center shadow-lg'>
-            <h3
-              className={`text-base font-semibold mb-2 ${
-                modal.type === 'success' ? 'text-emerald-600' : 'text-red-600'
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px]'>
+          <div className='w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-xl text-center'>
+            <div
+              className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full ${
+                modal.type === 'success' ? 'bg-green-50' : 'bg-red-50'
               }`}
             >
+              {modal.type === 'success' ? (
+                <svg
+                  width='22'
+                  height='22'
+                  fill='none'
+                  stroke='#16a34a'
+                  strokeWidth='2.5'
+                  viewBox='0 0 24 24'
+                >
+                  <polyline points='20,6 9,17 4,12' />
+                </svg>
+              ) : (
+                <svg
+                  width='22'
+                  height='22'
+                  fill='none'
+                  stroke='#ef4444'
+                  strokeWidth='2.5'
+                  viewBox='0 0 24 24'
+                >
+                  <line x1='18' y1='6' x2='6' y2='18' />
+                  <line x1='6' y1='6' x2='18' y2='18' />
+                </svg>
+              )}
+            </div>
+            <h3 className='mb-1 text-[15px] font-bold text-gray-900'>
               {modal.type === 'success' ? 'Berhasil' : 'Gagal'}
             </h3>
-
-            <p className='text-sm text-slate-600 mb-4'>{modal.message}</p>
-
+            <p className='mb-5 text-sm text-gray-400'>{modal.message}</p>
             <button
               onClick={() => setModal({ ...modal, show: false })}
-              className='rounded-lg bg-slate-800 text-white px-4 py-2 text-sm hover:bg-slate-700 transition'
+              className='rounded-lg border border-gray-200 px-5 py-2 text-xs font-medium text-gray-500 hover:bg-gray-50 transition'
             >
               Tutup
             </button>

@@ -11,5 +11,6 @@ router.get("/", verifyToken, isPetugas, peminjamanController.getAllPeminjaman);
 router.patch("/:id/status", verifyToken, isPetugas, peminjamanController.updateStatusPeminjaman);
 
 router.get("/aktif", verifyToken, isPeminjam, peminjamanController.getPeminjamanAktifUser);
+// router.get('/peminjaman/:id/unit', peminjamanController.getDetailUnitPeminjaman)
 
 module.exports = router;
