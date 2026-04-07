@@ -202,10 +202,43 @@ exports.updateStatusPeminjaman = async (req, res) => {
     );
 
     if (status === 'disetujui') {
+      const unitRes = await client.query (
+        `SELECT id_unit FROM alat_unit
+     WHERE id_alat = $1 AND status = 'tersedia'
+     LIMIT $2
+     FOR UPDATE`,
+        [peminjaman.id_alat, peminjaman.jumlah]
+      );
+
+      if (unitRes.rows.length < peminjaman.jumlah) {
+        await client.query ('ROLLBACK');
+        return res.status (400).json ({message: 'Unit tidak cukup'});
+      }
+
+      for (const u of unitRes.rows) {
+        await client.query (
+          `INSERT INTO peminjaman_unit (id_peminjaman, id_unit)
+       VALUES ($1, $2)`,
+          [id, u.id_unit]
+        );
+
+        await client.query (
+          `UPDATE alat_unit SET status = 'dipinjam'
+       WHERE id_unit = $1`,
+          [u.id_unit]
+        );
+      }
+
       await client.query (
         'UPDATE alat SET stok = stok - $1 WHERE id_alat = $2',
         [peminjaman.jumlah, peminjaman.id_alat]
       );
+
+      const io = req.app.get ('io');
+
+      io.emit ('peminjaman_disetujui', {
+        id_peminjaman: id,
+      });
     }
 
     await client.query ('COMMIT');
@@ -248,5 +281,35 @@ exports.getPeminjamanAktifUser = async (req, res) => {
     res.status (500).json ({
       message: 'Gagal mengambil peminjaman aktif',
     });
+  }
+};
+
+exports.getStrukPeminjaman = async (req, res) => {
+  const {id} = req.params;
+
+  try {
+    const result = await db.query (
+      `
+      SELECT 
+        p.id_peminjaman,
+        a.name AS alat,
+        p.tgl_pinjam,
+        p.tgl_rencana_kembali,
+        u.kode_unit
+      FROM peminjaman p
+      JOIN alat a ON p.id_alat = a.id_alat
+      JOIN peminjaman_unit pu ON pu.id_peminjaman = p.id_peminjaman
+      JOIN alat_unit u ON pu.id_unit = u.id_unit
+      WHERE p.id_peminjaman = $1
+    `,
+      [id]
+    );
+
+    res.json ({
+      data: result.rows,
+    });
+  } catch (err) {
+    console.error (err);
+    res.status (500).json ({message: 'Gagal ambil struk'});
   }
 };

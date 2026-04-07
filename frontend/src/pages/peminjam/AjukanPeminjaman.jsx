@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import api from '../../lib/api'
 import { useEffect } from 'react'
+import { io } from 'socket.io-client'
+import { useRef } from 'react'
 
 const inputCls =
   'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 placeholder:text-gray-300'
@@ -19,7 +21,7 @@ function Field ({ label, hint, children }) {
 }
 
 export default function AjukanPeminjaman () {
-  const { state } = useLocation()
+  const { id } = useParams()
   const navigate = useNavigate()
   const [jumlah, setJumlah] = useState(1)
   const [tglPinjam, setTglPinjam] = useState('')
@@ -30,15 +32,39 @@ export default function AjukanPeminjaman () {
   const [alatDetail, setAlatDetail] = useState(null)
   const [peminjamanId, setPeminjamanId] = useState(null)
   const [unitList, setUnitList] = useState([])
+  const hasStruk = unitList.length > 0
+  const socketRef = useRef(null)
+  const location = useLocation()
+  const [loadingAlat, setLoadingAlat] = useState(true)
+  const [statusAktif, setStatusAktif] = useState(null)
 
   useEffect(() => {
-    if (state?.id_alat) {
-      api.get(`/alat/${state.id_alat}`).then(res => {
-        setAlatDetail(res.data.data)
-        console.log(res.data)
-      })
+    socketRef.current = io('http://localhost:3000')
+
+    return () => socketRef.current.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const init = async () => {
+      try {
+        if (location.state?.alat) {
+          setAlatDetail(location.state.alat)
+          return
+        }
+
+        if (id) {
+          const res = await api.get(`/alat/${id}`)
+          setAlatDetail(res.data.data)
+        }
+      } catch (err) {
+        console.log('Gagal ambil alat')
+      } finally {
+        setLoadingAlat(false)
+      }
     }
-  }, [state])
+
+    init()
+  }, [id, location.state])
 
   useEffect(() => {
     const checkPeminjaman = async () => {
@@ -46,8 +72,11 @@ export default function AjukanPeminjaman () {
         const res = await api.get('/peminjaman/aktif')
 
         if (res.data.data.length > 0) {
+          const p = res.data.data[0]
+
           setIsBlocked(true)
-          setStatusPinjam('Masih ada peminjaman yang belum selesai')
+          setStatusAktif(p.status)
+          setPeminjamanId(p.id_peminjaman)
         }
       } catch (err) {
         console.log(err)
@@ -56,14 +85,6 @@ export default function AjukanPeminjaman () {
 
     checkPeminjaman()
   }, [])
-
-  if (!state) {
-    return (
-      <div className='rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-600'>
-        Silakan pilih alat terlebih dahulu dari menu Daftar Alat.
-      </div>
-    )
-  }
 
   const submit = async e => {
     e.preventDefault()
@@ -79,13 +100,15 @@ export default function AjukanPeminjaman () {
 
     try {
       const res = await api.post('/peminjaman', {
-        id_alat: state.id_alat,
+        id_alat: id,
         tgl_pinjam: tglPinjam,
         tgl_rencana_kembali: tglKembali,
         jumlah
       })
 
       setPeminjamanId(res.data.id_peminjaman)
+
+      localStorage.setItem('peminjaman_id', res.data.id_peminjaman)
       setModal({
         show: true,
         type: 'success',
@@ -102,42 +125,180 @@ export default function AjukanPeminjaman () {
     }
   }
 
-  useEffect(() => {
-    const saved = localStorage.getItem('struk_peminjaman')
+  const fetchStruk = async () => {
+    try {
+      const res = await api.get(`/peminjaman/${peminjamanId}/unit`)
+      console.log('STRUK:', res.data)
 
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      setUnitList(parsed.unit)
+      if (res.data.data.length > 0) {
+        setUnitList(res.data.data)
+      }
+    } catch (err) {
+      console.log(err)
     }
-  }, [])
+  }
 
   useEffect(() => {
     if (!peminjamanId) return
 
-    const interval = setInterval(async () => {
-      try {
-        const res = await api.get(`/peminjaman/${peminjamanId}/unit`)
-        if (res.data.data.length > 0) {
-          setUnitList(res.data.data)
-
-          localStorage.setItem(
-            'struk_peminjaman',
-            JSON.stringify({
-              id: peminjamanId,
-              unit: res.data.data,
-              alat: state.name
-            })
-          )
-
-          clearInterval(interval)
-        }
-      } catch (err) {
-        console.log(err)
-      }
-    }, 3000)
-
-    return () => clearInterval(interval)
+    fetchStruk()
   }, [peminjamanId])
+
+  useEffect(() => {
+    if (!socketRef.current) return
+
+    socketRef.current.on('peminjaman_disetujui', data => {
+      if (data.id_peminjaman == peminjamanId) {
+        console.log('REALTIME MASUK 🔥')
+        fetchStruk()
+      }
+    })
+
+    return () => {
+      socketRef.current.off('peminjaman_disetujui')
+    }
+  }, [peminjamanId])
+
+  useEffect(() => {
+    if (hasStruk) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = 'auto'
+    }
+
+    return () => {
+      document.body.style.overflow = 'auto'
+    }
+  }, [hasStruk])
+
+  useEffect(() => {
+    setUnitList([])
+    setPeminjamanId(null)
+  }, [id])
+
+  useEffect(() => {
+    if (statusAktif === 'disetujui' || statusAktif === 'dipinjam') {
+      fetchStruk()
+    }
+  }, [statusAktif])
+
+  console.log('ID:', id)
+  console.log('STATE:', location.state)
+  console.log('ALAT:', alatDetail)
+
+  if (hasStruk) {
+    return (
+      <div className='min-h-screen bg-gray-50 flex items-center justify-center p-4'>
+        <div className='w-full max-w-md bg-white rounded-2xl shadow-xl border p-6'>
+          <div className='text-center mb-5'>
+            <h1 className='text-xl font-bold text-gray-900'>
+              🧾 Struk Peminjaman
+            </h1>
+            <p className='text-xs text-gray-400'>
+              Simpan atau screenshot sebagai bukti
+            </p>
+          </div>
+
+          <div className='space-y-2 text-sm text-gray-700 mb-4'>
+            <p>
+              <b>ID:</b> {unitList[0]?.id_peminjaman}
+            </p>
+            <p>
+              <b>Alat:</b> {alatDetail?.name}
+            </p>
+            <p>
+              <b>Tanggal Pinjam:</b>{' '}
+              {new Date(unitList[0]?.tgl_pinjam).toLocaleDateString('id-ID')}
+            </p>
+            <p>
+              <b>Kembali:</b> {unitList[0]?.tgl_rencana_kembali}
+            </p>
+          </div>
+
+          <div className='border-t pt-4'>
+            <p className='text-xs text-gray-500 mb-2'>Kode Unit</p>
+
+            <div className='grid grid-cols-2 gap-2'>
+              {unitList.map(u => (
+                <div
+                  key={u.kode_unit}
+                  className='border rounded-lg p-2 text-center font-mono text-xs bg-gray-100'
+                >
+                  {u.kode_unit}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className='mt-6 space-y-2'>
+            <button
+              onClick={() => window.print()}
+              className='w-full bg-black text-white py-2 rounded-lg text-xs'
+            >
+              Print / Simpan
+            </button>
+
+            <button
+              onClick={() => navigate('/peminjam')}
+              className='w-full border py-2 rounded-lg text-xs text-gray-600'
+            >
+              Kembali ke Daftar Alat
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!alatDetail) {
+    return (
+      <div className='flex flex-col items-center justify-center h-screen text-center px-4'>
+        <h2 className='text-lg font-semibold text-gray-700'>
+          ⚠️ Belum memilih alat
+        </h2>
+        <p className='text-sm text-gray-400 mt-1'>
+          Silakan pilih alat terlebih dahulu sebelum mengajukan peminjaman
+        </p>
+
+        <button
+          onClick={() => navigate('/peminjam/alat')}
+          className='mt-4 px-4 py-2 text-xs bg-gray-900 text-white rounded-lg'
+        >
+          Pilih Alat
+        </button>
+      </div>
+    )
+  }
+
+  if (loadingAlat) {
+    return (
+      <div className='flex justify-center items-center h-screen text-gray-400'>
+        Memuat data alat...
+      </div>
+    )
+  }
+
+  if (statusAktif === 'menunggu') {
+    return (
+      <div className='min-h-screen flex items-center justify-center text-center px-4'>
+        <div className='bg-white p-6 rounded-xl shadow border max-w-sm'>
+          <h2 className='text-lg font-semibold text-gray-800'>
+            ⏳ Menunggu Persetujuan
+          </h2>
+          <p className='text-sm text-gray-400 mt-2'>
+            Peminjaman kamu sedang diproses oleh petugas.
+          </p>
+
+          <button
+            onClick={() => navigate('/peminjam')}
+            className='mt-4 px-4 py-2 text-xs bg-gray-900 text-white rounded-lg'
+          >
+            Kembali
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className='mx-auto max-w-md'>
@@ -148,7 +309,9 @@ export default function AjukanPeminjaman () {
         </h1>
         <p className='mt-0.5 text-sm text-gray-400'>
           Alat:{' '}
-          <span className='font-semibold text-gray-700'>{state.name}</span>
+          <span className='font-semibold text-gray-700'>
+            {alatDetail?.name}
+          </span>
         </p>
       </div>
 
@@ -294,36 +457,6 @@ export default function AjukanPeminjaman () {
               Tutup
             </button>
           </div>
-        </div>
-      )}
-
-      {unitList.length > 0 && (
-        <div className='mt-4 rounded-xl border border-green-200 bg-green-50 p-4'>
-          <p className='text-sm font-semibold text-green-700 mb-2'>
-            ✅ Peminjaman Disetujui
-          </p>
-
-          <p className='text-xs text-gray-600 mb-2'>
-            Tunjukkan kode ini ke petugas:
-          </p>
-
-          <div className='flex flex-wrap gap-2'>
-            {unitList.map(u => (
-              <span
-                key={u.kode_unit}
-                className='px-3 py-1 bg-white border rounded font-mono text-xs shadow'
-              >
-                {u.kode_unit}
-              </span>
-            ))}
-          </div>
-
-          <button
-            onClick={() => localStorage.removeItem('struk_peminjaman')}
-            className='mt-3 text-xs text-red-500'
-          >
-            Hapus Struk
-          </button>
         </div>
       )}
     </div>

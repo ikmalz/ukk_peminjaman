@@ -69,6 +69,18 @@ exports.createPengembalian = async (req, res) => {
       ]
     );
 
+    const unitRes = await db.query (
+      `SELECT id_unit FROM peminjaman_unit WHERE id_peminjaman = $1`,
+      [id_peminjaman]
+    );
+
+    for (const u of unitRes.rows) {
+      await db.query (
+        `UPDATE alat_unit SET status = 'tersedia' WHERE id_unit = $1`,
+        [u.id_unit]
+      );
+    }
+
     await client.query (
       `UPDATE peminjaman SET status='menunggu_pengembalian' WHERE id_peminjaman=$1`,
       [id_peminjaman]
