@@ -239,6 +239,11 @@ exports.updateStatusPeminjaman = async (req, res) => {
       io.emit ('peminjaman_disetujui', {
         id_peminjaman: id,
       });
+
+      io.emit ('peminjaman_update', {
+        id_peminjaman: id,
+        status,
+      });
     }
 
     await client.query ('COMMIT');
@@ -265,7 +270,7 @@ exports.getPeminjamanAktifUser = async (req, res) => {
   try {
     const result = await db.query (
       `
-    SELECT id_alat, status
+    SELECT id_peminjaman, id_alat, status
     FROM peminjaman
     WHERE id_user = $1
     AND status IN ('menunggu','disetujui','dipinjam')

@@ -285,3 +285,82 @@ exports.getUnitByAlat = async (req, res) => {
 
   res.json (result.rows);
 };
+
+exports.deleteAlat = async (req, res) => {
+  const {id} = req.params;
+  const client = await db.connect ();
+
+  try {
+    await client.query ('BEGIN');
+    await client.query (`DELETE FROM riwayat_alat WHERE id_alat = $1`, [id]);
+
+    const peminjaman = await client.query (
+      `SELECT id_peminjaman FROM peminjaman WHERE id_alat = $1`,
+      [id]
+    );
+
+    const ids = peminjaman.rows.map (p => p.id_peminjaman);
+
+    const pengembalian = await client.query (
+      `SELECT id_pengembalian FROM pengembalian WHERE id_peminjaman = ANY($1)`,
+      [ids]
+    );
+
+    const pengembalianIds = pengembalian.rows.map (p => p.id_pengembalian);
+
+    if (pengembalianIds.length > 0) {
+      await client.query (
+        `DELETE FROM log_aktivitas WHERE id_pengembalian = ANY($1)`,
+        [pengembalianIds]
+      );
+    }
+
+    if (ids.length > 0) {
+      await client.query (
+        `DELETE FROM log_aktivitas WHERE id_peminjaman = ANY($1)`,
+        [ids]
+      );
+    }
+
+    if (ids.length > 0) {
+      await client.query (
+        `DELETE FROM peminjaman_unit WHERE id_peminjaman = ANY($1)`,
+        [ids]
+      );
+
+      await client.query (
+        `DELETE FROM pengembalian WHERE id_peminjaman = ANY($1)`,
+        [ids]
+      );
+
+      await client.query (
+        `DELETE FROM denda 
+         WHERE id_pengembalian IN (
+           SELECT id_pengembalian FROM pengembalian 
+           WHERE id_peminjaman = ANY($1)
+         )`,
+        [ids]
+      );
+
+      await client.query (`DELETE FROM peminjaman WHERE id_alat = $1`, [id]);
+    }
+
+    await client.query (`DELETE FROM alat_unit WHERE id_alat = $1`, [id]);
+
+    await client.query (`DELETE FROM alat WHERE id_alat = $1`, [id]);
+
+    await client.query ('COMMIT');
+
+    res.json ({
+      message: 'Alat dan semua relasinya berhasil dihapus',
+    });
+  } catch (err) {
+    await client.query ('ROLLBACK');
+    console.error (err);
+    res.status (500).json ({
+      message: 'Gagal menghapus alat',
+    });
+  } finally {
+    client.release ();
+  }
+};

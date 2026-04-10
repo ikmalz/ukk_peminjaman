@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../lib/api'
+import { io } from 'socket.io-client'
+import { useRef } from 'react'
 
 const formatDate = d =>
   new Date(d).toLocaleDateString('id-ID', {
@@ -31,6 +33,7 @@ export default function VerifikasiPengembalian () {
   const [confirmData, setConfirmData] = useState(null)
   const limit = 5
   const [loadingVerif, setLoadingVerif] = useState(false)
+  const socketRef = useRef(null)
 
   const fetchData = async () => {
     setLoading(true)
@@ -45,6 +48,19 @@ export default function VerifikasiPengembalian () {
 
   useEffect(() => {
     fetchData()
+  }, [])
+
+  useEffect(() => {
+    socketRef.current = io('http://localhost:3000')
+
+    socketRef.current.on('pengembalian_update', () => {
+      console.log('REALTIME PENGEMBALIAN 🔥')
+      fetchData()
+    })
+
+    return () => {
+      socketRef.current.disconnect()
+    }
   }, [])
 
   const verifikasi = async () => {
@@ -85,7 +101,7 @@ export default function VerifikasiPengembalian () {
   }, [tab, search])
 
   const pending = data.filter(d => d.status_verifikasi === 'menunggu').length
-  console.log('CLICK VERIFIKASI');
+  console.log('CLICK VERIFIKASI')
 
   return (
     <div>

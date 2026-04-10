@@ -282,13 +282,19 @@ exports.verifikasiPengembalian = async (req, res) => {
       );
     }
 
-    // ✅ UPDATE PEMINJAMAN
     await client.query (
       `UPDATE peminjaman SET status = 'selesai' WHERE id_peminjaman = $1`,
       [data.id_peminjaman]
     );
 
     await client.query ('COMMIT');
+
+    const io = req.app.get ('io');
+
+    io.emit ('pengembalian_update', {
+      id_pengembalian: id,
+      status: 'selesai',
+    });
 
     console.log ('=== DEBUG VERIFIKASI END ===');
 

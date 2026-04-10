@@ -103,6 +103,19 @@ export default function Alat () {
       ? src
       : `${IMAGE_URL}${src}`
 
+  const handleDelete = async id => {
+    const confirmDelete = confirm('Yakin ingin menghapus alat ini?')
+
+    if (!confirmDelete) return
+
+    try {
+      await api.delete(`/alat/${id}`)
+      fetchData()
+    } catch (err) {
+      alert(err.response?.data?.message || 'Gagal menghapus alat')
+    }
+  }
+
   return (
     <div>
       {/* Page header */}
@@ -467,6 +480,12 @@ export default function Alat () {
                           className='text-xs text-gray-500 hover:text-black'
                         >
                           Lihat Unit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(a.id_alat)}
+                          className='text-xs font-medium text-red-500 hover:text-red-700 transition'
+                        >
+                          Hapus
                         </button>
                       </div>
                     </td>

@@ -52,6 +52,8 @@ export default function PengembalianPeminjam () {
   const [denda, setDenda] = useState([])
   const [form, setForm] = useState({})
   const [modal, setModal] = useState({ show: false, type: '', message: '' })
+  const [showAll, setShowAll] = useState(false)
+  const displayedDenda = showAll ? denda : denda.slice(0, 3)
 
   const fetchData = async () => {
     const res = await api.get('/peminjaman/saya')
@@ -141,15 +143,16 @@ export default function PengembalianPeminjam () {
               Informasi Denda
             </span>
           </div>
-          <div className='divide-y divide-gray-50 px-5'>
-            {denda.map(d => (
+          <div className='divide-y divide-gray-50 px-5 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300'>
+            {' '}
+            {displayedDenda.map(d => (
               <div
                 key={d.id_denda}
                 className='flex items-center justify-between py-3.5'
               >
-                <div>
-                  <p className='text-sm font-semibold text-gray-900'>
-                    {fmt(d.total_denda)}
+                <div className='px-5 py-3 bg-red-50 border-b border-red-100'>
+                  <p className='text-sm font-semibold text-red-600'>
+                    Total Denda: {fmt(d.total_denda)}
                   </p>
                   <p className='text-[12px] text-gray-400'>
                     Terlambat {d.hari_terlambat} hari
@@ -168,6 +171,14 @@ export default function PengembalianPeminjam () {
                 )}
               </div>
             ))}
+            {denda.length > 3 && (
+              <button
+                onClick={() => setShowAll(!showAll)}
+                className='text-xs text-blue-500 px-5 py-2'
+              >
+                {showAll ? 'Tutup' : 'Lihat Semua'}
+              </button>
+            )}
           </div>
         </div>
       )}

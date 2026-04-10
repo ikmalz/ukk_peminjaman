@@ -23,7 +23,7 @@ function Field ({ label, hint, children }) {
 export default function AjukanPeminjaman () {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [jumlah, setJumlah] = useState(1)
+  const [jumlah, setJumlah] = useState('')
   const [tglPinjam, setTglPinjam] = useState('')
   const [tglKembali, setTglKembali] = useState('')
   const [modal, setModal] = useState({ show: false, type: '', message: '' })
@@ -37,6 +37,8 @@ export default function AjukanPeminjaman () {
   const location = useLocation()
   const [loadingAlat, setLoadingAlat] = useState(true)
   const [statusAktif, setStatusAktif] = useState(null)
+  const [isTransitioning, setIsTransitioning] = useState(false)
+  const [errorJumlah, setErrorJumlah] = useState('')
 
   useEffect(() => {
     socketRef.current = io('http://localhost:3000')
@@ -71,12 +73,16 @@ export default function AjukanPeminjaman () {
       try {
         const res = await api.get('/peminjaman/aktif')
 
-        if (res.data.data.length > 0) {
-          const p = res.data.data[0]
+        const aktif = res.data.data.find(p =>
+          ['menunggu', 'disetujui', 'dipinjam'].includes(p.status)
+        )
 
+        if (aktif) {
           setIsBlocked(true)
-          setStatusAktif(p.status)
-          setPeminjamanId(p.id_peminjaman)
+          setStatusAktif(aktif.status)
+          setPeminjamanId(aktif.id_peminjaman)
+        } else {
+          setIsBlocked(false)
         }
       } catch (err) {
         console.log(err)
@@ -84,16 +90,16 @@ export default function AjukanPeminjaman () {
     }
 
     checkPeminjaman()
-  }, [])
+  }, [location.pathname])
 
   const submit = async e => {
     e.preventDefault()
 
-    if (tglKembali < tglPinjam) {
+    if (tglKembali <= tglPinjam) {
       setModal({
         show: true,
         type: 'error',
-        message: 'Tanggal kembali tidak boleh sebelum tanggal pinjam'
+        message: 'Tanggal kembali minimal 1 hari setelah tanggal pinjam'
       })
       return
     }
@@ -127,8 +133,9 @@ export default function AjukanPeminjaman () {
 
   const fetchStruk = async () => {
     try {
-      const res = await api.get(`/peminjaman/${peminjamanId}/unit`)
+      const res = await api.get(`/peminjaman/${peminjamanId}/struk`)
       console.log('STRUK:', res.data)
+      console.log('PEMINJAMAN ID:', peminjamanId)
 
       if (res.data.data.length > 0) {
         setUnitList(res.data.data)
@@ -143,6 +150,13 @@ export default function AjukanPeminjaman () {
 
     fetchStruk()
   }, [peminjamanId])
+
+  useEffect(() => {
+    const storedId = localStorage.getItem('peminjaman_id')
+    if (storedId) {
+      setPeminjamanId(storedId)
+    }
+  }, [])
 
   useEffect(() => {
     if (!socketRef.current) return
@@ -182,13 +196,46 @@ export default function AjukanPeminjaman () {
     }
   }, [statusAktif])
 
+  useEffect(() => {
+    if (statusAktif === 'selesai') {
+      setUnitList([])
+      setPeminjamanId(null)
+      setIsBlocked(false)
+    }
+  }, [statusAktif])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkPeminjaman()
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  const tambahSatuHari = dateStr => {
+    if (!dateStr) return ''
+
+    const d = new Date(dateStr)
+    d.setDate(d.getDate() + 1)
+
+    return d.toISOString().split('T')[0]
+  }
+
+  useEffect(() => {
+    if (tglPinjam && tglKembali) {
+      if (tglKembali <= tglPinjam) {
+        setTglKembali('')
+      }
+    }
+  }, [tglPinjam])
+
   console.log('ID:', id)
   console.log('STATE:', location.state)
   console.log('ALAT:', alatDetail)
 
   if (hasStruk) {
     return (
-      <div className='min-h-screen bg-gray-50 flex items-center justify-center p-4'>
+      <div className='min-h-screen flex items-center justify-center px-4 animate-fade-in'>
         <div className='w-full max-w-md bg-white rounded-2xl shadow-xl border p-6'>
           <div className='text-center mb-5'>
             <h1 className='text-xl font-bold text-gray-900'>
@@ -300,6 +347,22 @@ export default function AjukanPeminjaman () {
     )
   }
 
+  if (statusAktif === 'selesai') {
+    return (
+      <div>
+        <h2>Silakan pilih alat</h2>
+      </div>
+    )
+  }
+
+  if (isTransitioning) {
+    return (
+      <div className='h-screen flex items-center justify-center'>
+        <div className='animate-pulse text-gray-400 text-sm'>Memproses...</div>
+      </div>
+    )
+  }
+
   return (
     <div className='mx-auto max-w-md'>
       {/* Header */}
@@ -358,17 +421,45 @@ export default function AjukanPeminjaman () {
               type='number'
               min='1'
               required
-              className={inputCls}
+              className={`${inputCls} ${
+                errorJumlah ? 'border-red-500 focus:ring-red-100' : ''
+              }`}
               value={jumlah}
-              onChange={e => setJumlah(Number(e.target.value))}
+              onChange={e => {
+                const value = e.target.value
+
+                setJumlah(value)
+
+                const numberValue = Number(value)
+
+                if (!value) {
+                  setErrorJumlah('')
+                  return
+                }
+
+                if (numberValue > alatDetail?.stok) {
+                  setErrorJumlah(`Stok hanya tersedia ${alatDetail?.stok}`)
+                } else if (numberValue <= 0) {
+                  setErrorJumlah('Jumlah minimal 1')
+                } else {
+                  setErrorJumlah('')
+                }
+              }}
               disabled={isBlocked}
             />
+            {errorJumlah && (
+              <p className='text-[11px] text-red-500 mt-1'>{errorJumlah}</p>
+            )}
           </Field>
 
           <Field label='Rencana Pengembalian'>
             <input
               type='date'
-              min={new Date().toISOString().split('T')[0]}
+              min={
+                tglPinjam
+                  ? tambahSatuHari(tglPinjam)
+                  : new Date().toISOString().split('T')[0]
+              }
               required
               className={inputCls}
               value={tglKembali}
@@ -451,7 +542,16 @@ export default function AjukanPeminjaman () {
             </h3>
             <p className='mb-5 text-sm text-gray-400'>{modal.message}</p>
             <button
-              onClick={() => setModal({ ...modal, show: false })}
+              onClick={() => {
+                setModal({ ...modal, show: false })
+                setIsTransitioning(true)
+
+                setTimeout(() => {
+                  setStatusAktif('menunggu')
+                  setIsBlocked(true)
+                  setIsTransitioning(false)
+                }, 300)
+              }}
               className='rounded-lg border border-gray-200 px-5 py-2 text-xs font-medium text-gray-500 hover:bg-gray-50 transition'
             >
               Tutup

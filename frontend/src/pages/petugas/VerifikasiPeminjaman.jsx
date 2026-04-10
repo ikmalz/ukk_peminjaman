@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../lib/api'
+import { io } from 'socket.io-client'
+import { useRef } from 'react'
 
 const statusCfg = {
   menunggu: {
@@ -44,7 +46,7 @@ export default function VerifikasiPeminjaman () {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const limit = 10
-  
+  const socketRef = useRef(null)
 
   const fetchData = async () => {
     setLoading(true)
@@ -56,6 +58,19 @@ export default function VerifikasiPeminjaman () {
     }
     setLoading(false)
   }
+
+  useEffect(() => {
+    socketRef.current = io('http://localhost:3000')
+
+    socketRef.current.on('peminjaman_update', () => {
+      console.log('REALTIME PEMINJAMAN 🔥')
+      fetchData()
+    })
+
+    return () => {
+      socketRef.current.disconnect()
+    }
+  }, [])
 
   useEffect(() => {
     fetchData()
@@ -91,6 +106,27 @@ export default function VerifikasiPeminjaman () {
   useEffect(() => {
     setPage(1)
   }, [tab, search])
+
+  const formatTanggal = date => {
+    if (!date) return '-'
+    return new Date(date).toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    })
+  }
+
+  const formatTanggalWaktu = date => {
+    if (!date) return '-'
+    return new Date(date).toLocaleString('id-ID', {
+      timeZone: 'Asia/Jakarta',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
 
   return (
     <div>
@@ -171,7 +207,6 @@ export default function VerifikasiPeminjaman () {
                   'Tgl Pinjam',
                   'Rencana Kembali',
                   'Status',
-                  'Aksi'
                 ].map(h => (
                   <th
                     key={h}
@@ -218,10 +253,10 @@ export default function VerifikasiPeminjaman () {
                     </td>
                     <td className='px-5 py-3.5 text-gray-600'>{p.alat}</td>
                     <td className='px-5 py-3.5 text-gray-500 tabular-nums'>
-                      {p.tgl_pinjam}
+                      {formatTanggalWaktu(p.tgl_pinjam)}
                     </td>
                     <td className='px-5 py-3.5 text-gray-500 tabular-nums'>
-                      {p.tgl_rencana_kembali}
+                      {formatTanggal(p.tgl_rencana_kembali)}
                     </td>
                     <td className='px-5 py-3.5'>
                       <StatusBadge status={p.status} />

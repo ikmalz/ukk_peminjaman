@@ -29,5 +29,11 @@ router.put(
   alatController.updateAlat
 );
 router.put('/:id/status', verifyToken, isAdmin, alatController.updateStatusAlat);
+router.delete(
+  "/:id",
+  verifyToken,
+  isAdmin,
+  alatController.deleteAlat
+);
 
 module.exports = router;
