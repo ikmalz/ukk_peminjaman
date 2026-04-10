@@ -58,7 +58,7 @@ export default function PengembalianPeminjam () {
   const fetchData = async () => {
     const res = await api.get('/peminjaman/saya')
     const aktif = res.data.data.filter(
-      p => p.status === 'disetujui' || p.status === 'menunggu_pengembalian'
+      p => p.status === 'dipinjam' || p.status === 'menunggu_pengembalian'
     )
     setData(aktif)
   }
@@ -240,7 +240,7 @@ export default function PengembalianPeminjam () {
                 </div>
 
                 {/* Return form */}
-                {p.status === 'disetujui' && (
+                {p.status === 'dipinjam' && (
                   <div className='space-y-3 border-t border-gray-100 bg-gray-50/50 px-5 py-4'>
                     <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                       <div className='flex flex-col gap-1'>

@@ -18,6 +18,7 @@ import VerifikasiPengembalian from './pages/petugas/VerifikasiPengembalian'
 import DendaPetugas from './pages/petugas/DendaPetugas'
 import DetailAlat from './pages/peminjam/DetailAlat'
 import AlatUnit from './pages/admin/AlatUnit'
+import ScanQR from './pages/petugas/ScanQR'
 
 export default function App () {
   return (
@@ -56,6 +57,7 @@ export default function App () {
             <Route path='verifikasi' element={<VerifikasiPeminjaman />} />
             <Route path='pengembalian' element={<VerifikasiPengembalian />} />
             <Route path='denda' element={<DendaPetugas />} />
+            <Route path="scan" element={<ScanQR />} />
           </Route>
 
           {/* PEMINJAM */}

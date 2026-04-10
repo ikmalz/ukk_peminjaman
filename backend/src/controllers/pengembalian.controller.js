@@ -20,20 +20,22 @@ exports.createPengembalian = async (req, res) => {
     await client.query ('BEGIN');
 
     const cek = await client.query (
-      `SELECT status FROM peminjaman WHERE id_peminjaman=$1 AND id_user=$2 FOR UPDATE`,
+      `SELECT status, status_pengambilan 
+   FROM peminjaman 
+   WHERE id_peminjaman=$1 AND id_user=$2 
+   FOR UPDATE`,
       [id_peminjaman, id_user]
     );
-
     if (cek.rows.length === 0) {
       await client.query ('ROLLBACK');
       return res.status (404).json ({message: 'Peminjaman tidak ditemukan'});
     }
 
-    if (cek.rows[0].status !== 'disetujui') {
+    if (cek.rows[0].status_pengambilan !== 'sudah_diambil') {
       await client.query ('ROLLBACK');
-      return res
-        .status (400)
-        .json ({message: 'Peminjaman tidak dapat dikembalikan'});
+      return res.status (400).json ({
+        message: 'Barang belum diambil, tidak bisa dikembalikan',
+      });
     }
 
     const duplikat = await client.query (

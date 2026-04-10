@@ -4,6 +4,7 @@ import api from '../../lib/api'
 import { useEffect } from 'react'
 import { io } from 'socket.io-client'
 import { useRef } from 'react'
+import { QRCodeCanvas } from 'qrcode.react'
 
 const inputCls =
   'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 placeholder:text-gray-300'
@@ -39,6 +40,8 @@ export default function AjukanPeminjaman () {
   const [statusAktif, setStatusAktif] = useState(null)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [errorJumlah, setErrorJumlah] = useState('')
+  const [statusPengambilan, setStatusPengambilan] = useState(null)
+  const [qrToken, setQrToken] = useState(null)
 
   useEffect(() => {
     socketRef.current = io('http://localhost:3000')
@@ -68,27 +71,28 @@ export default function AjukanPeminjaman () {
     init()
   }, [id, location.state])
 
-  useEffect(() => {
-    const checkPeminjaman = async () => {
-      try {
-        const res = await api.get('/peminjaman/aktif')
+  const checkPeminjaman = async () => {
+    try {
+      const res = await api.get('/peminjaman/aktif')
 
-        const aktif = res.data.data.find(p =>
-          ['menunggu', 'disetujui', 'dipinjam'].includes(p.status)
-        )
+      const aktif = res.data.data.find(p =>
+        ['menunggu', 'disetujui', 'dipinjam'].includes(p.status)
+      )
 
-        if (aktif) {
-          setIsBlocked(true)
-          setStatusAktif(aktif.status)
-          setPeminjamanId(aktif.id_peminjaman)
-        } else {
-          setIsBlocked(false)
-        }
-      } catch (err) {
-        console.log(err)
+      if (aktif) {
+        setIsBlocked(true)
+        setStatusAktif(aktif.status)
+        setPeminjamanId(aktif.id_peminjaman)
+        setStatusPengambilan(aktif.status_pengambilan)
+      } else {
+        setIsBlocked(false)
       }
+    } catch (err) {
+      console.log(err)
     }
+  }
 
+  useEffect(() => {
     checkPeminjaman()
   }, [location.pathname])
 
@@ -139,6 +143,7 @@ export default function AjukanPeminjaman () {
 
       if (res.data.data.length > 0) {
         setUnitList(res.data.data)
+        setQrToken(res.data.data[0].qr_token)
       }
     } catch (err) {
       console.log(err)
@@ -176,12 +181,15 @@ export default function AjukanPeminjaman () {
   useEffect(() => {
     if (hasStruk) {
       document.body.style.overflow = 'hidden'
+      document.documentElement.style.overflow = 'hidden' // 🔥 penting
     } else {
       document.body.style.overflow = 'auto'
+      document.documentElement.style.overflow = 'auto'
     }
 
     return () => {
       document.body.style.overflow = 'auto'
+      document.documentElement.style.overflow = 'auto'
     }
   }, [hasStruk])
 
@@ -212,6 +220,14 @@ export default function AjukanPeminjaman () {
     return () => clearInterval(interval)
   }, [])
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkPeminjaman()
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [])
+
   const tambahSatuHari = dateStr => {
     if (!dateStr) return ''
 
@@ -229,14 +245,27 @@ export default function AjukanPeminjaman () {
     }
   }, [tglPinjam])
 
+  const formatWIB = date => {
+    return (
+      new Date(date).toLocaleString('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric'
+      }) + ' WIB'
+    )
+  }
+
   console.log('ID:', id)
   console.log('STATE:', location.state)
   console.log('ALAT:', alatDetail)
 
   if (hasStruk) {
     return (
-      <div className='min-h-screen flex items-center justify-center px-4 animate-fade-in'>
-        <div className='w-full max-w-md bg-white rounded-2xl shadow-xl border p-6'>
+      <div className='h-screen flex items-center justify-center px-4 bg-gray-100 overflow-hidden'>
+        {' '}
+        <div className='w-full max-w-md bg-white rounded-2xl shadow-2xl border p-6 relative overflow-hidden'>
+          {' '}
           <div className='text-center mb-5'>
             <h1 className='text-xl font-bold text-gray-900'>
               🧾 Struk Peminjaman
@@ -245,23 +274,32 @@ export default function AjukanPeminjaman () {
               Simpan atau screenshot sebagai bukti
             </p>
           </div>
-
+          {statusPengambilan === 'belum_diambil' && (
+            <div className='mb-4 p-3 text-sm bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg'>
+              📍 Silakan datang ke petugas untuk scan QR dan mengambil barang
+            </div>
+          )}
           <div className='space-y-2 text-sm text-gray-700 mb-4'>
             <p>
               <b>ID:</b> {unitList[0]?.id_peminjaman}
             </p>
             <p>
-              <b>Alat:</b> {alatDetail?.name}
+              <b>Alat:</b> {unitList[0]?.alat}
             </p>
             <p>
-              <b>Tanggal Pinjam:</b>{' '}
-              {new Date(unitList[0]?.tgl_pinjam).toLocaleDateString('id-ID')}
+              <b>Tanggal Pinjam:</b> {formatWIB(unitList[0]?.tgl_pinjam)}
             </p>
             <p>
-              <b>Kembali:</b> {unitList[0]?.tgl_rencana_kembali}
+              <b>Kembali:</b> {formatWIB(unitList[0]?.tgl_rencana_kembali)}
             </p>
           </div>
-
+          <div className='flex justify-center my-4'>
+            <QRCodeCanvas
+              value={qrToken || ''}
+              includeMargin={true}
+              size={260}
+            />
+          </div>
           <div className='border-t pt-4'>
             <p className='text-xs text-gray-500 mb-2'>Kode Unit</p>
 
@@ -276,7 +314,6 @@ export default function AjukanPeminjaman () {
               ))}
             </div>
           </div>
-
           <div className='mt-6 space-y-2'>
             <button
               onClick={() => window.print()}
@@ -363,6 +400,8 @@ export default function AjukanPeminjaman () {
     )
   }
 
+  console.log('QR TOKEN FINAL:', qrToken)
+
   return (
     <div className='mx-auto max-w-md'>
       {/* Header */}
@@ -377,6 +416,12 @@ export default function AjukanPeminjaman () {
           </span>
         </p>
       </div>
+
+      {statusPengambilan === 'sudah_diambil' && (
+        <div className='mb-4 p-3 text-sm bg-green-50 border border-green-200 text-green-700 rounded-lg'>
+          ✅ Barang sudah diambil
+        </div>
+      )}
 
       {alatDetail && (
         <div className='mb-4 text-xs text-gray-500 space-y-1'>

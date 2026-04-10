@@ -5,6 +5,7 @@ exports.createPeminjaman = async (req, res) => {
   const id_user = req.user.id_user;
 
   const {id_alat, tgl_pinjam, tgl_rencana_kembali, jumlah} = req.body;
+  const {v4: uuidv4} = require ('uuid');
 
   if (!id_alat || !tgl_pinjam || !tgl_rencana_kembali || !jumlah) {
     return res.status (400).json ({
@@ -64,14 +65,24 @@ exports.createPeminjaman = async (req, res) => {
       return res.status (400).json ({message: 'Stok alat tidak mencukupi'});
     }
 
+    const qr_token = uuidv4 ();
+
     const insert = await db.query (
       `
-      INSERT INTO peminjaman
-      (id_user, id_alat, tgl_pinjam, tgl_rencana_kembali, tgl_jatuh_tempo, jumlah, status)
-      VALUES ($1,$2,$3,$4,$5,$6,'menunggu')
-      RETURNING id_peminjaman
-    `,
-      [id_user, id_alat, tgl_pinjam, tgl_rencana_kembali, jatuhTempo, jumlah]
+  INSERT INTO peminjaman
+  (id_user, id_alat, tgl_pinjam, tgl_rencana_kembali, tgl_jatuh_tempo, jumlah, status, qr_token)
+  VALUES ($1,$2,$3,$4,$5,$6,'menunggu',$7)
+  RETURNING id_peminjaman, qr_token
+  `,
+      [
+        id_user,
+        id_alat,
+        tgl_pinjam,
+        tgl_rencana_kembali,
+        jatuhTempo,
+        jumlah,
+        qr_token,
+      ]
     );
 
     console.log ('CREATE PEMINJAMAN:', {
@@ -89,6 +100,7 @@ exports.createPeminjaman = async (req, res) => {
     res.json ({
       message: 'Peminjaman berhasil diajukan',
       id_peminjaman: insert.rows[0].id_peminjaman,
+      qr_token: insert.rows[0].qr_token,
     });
   } catch (err) {
     console.error ('CREATE PEMINJAMAN ERROR:', err);
@@ -196,10 +208,21 @@ exports.updateStatusPeminjaman = async (req, res) => {
       });
     }
 
-    await client.query (
-      'UPDATE peminjaman SET status = $1 WHERE id_peminjaman = $2',
-      [status, id]
-    );
+    if (status === 'disetujui') {
+      await client.query (
+        `UPDATE peminjaman 
+     SET status = $1, status_pengambilan = 'belum_diambil'
+     WHERE id_peminjaman = $2`,
+        [status, id]
+      );
+    } else {
+      await client.query (
+        `UPDATE peminjaman 
+     SET status = $1
+     WHERE id_peminjaman = $2`,
+        [status, id]
+      );
+    }
 
     if (status === 'disetujui') {
       const unitRes = await client.query (
@@ -270,7 +293,7 @@ exports.getPeminjamanAktifUser = async (req, res) => {
   try {
     const result = await db.query (
       `
-    SELECT id_peminjaman, id_alat, status
+    SELECT id_peminjaman, id_alat, status, status_pengambilan
     FROM peminjaman
     WHERE id_user = $1
     AND status IN ('menunggu','disetujui','dipinjam')
@@ -297,6 +320,7 @@ exports.getStrukPeminjaman = async (req, res) => {
       `
       SELECT 
         p.id_peminjaman,
+        p.qr_token,
         a.name AS alat,
         p.tgl_pinjam,
         p.tgl_rencana_kembali,
@@ -316,5 +340,47 @@ exports.getStrukPeminjaman = async (req, res) => {
   } catch (err) {
     console.error (err);
     res.status (500).json ({message: 'Gagal ambil struk'});
+  }
+};
+
+exports.scanQrPengambilan = async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    const cek = await db.query(
+      `SELECT id_peminjaman, status_pengambilan 
+       FROM peminjaman 
+       WHERE qr_token = $1`,
+      [token]
+    );
+
+    if (cek.rows.length === 0) {
+      return res.status(404).json({ message: 'QR tidak valid' });
+    }
+
+    const peminjaman = cek.rows[0];
+
+    if (peminjaman.status_pengambilan === 'sudah_diambil') {
+      return res.status(400).json({
+        message: 'Barang sudah diambil sebelumnya',
+      });
+    }
+
+    await db.query(
+      `
+      UPDATE peminjaman
+      SET status_pengambilan = 'sudah_diambil',
+          waktu_pengambilan = NOW(),
+          status = 'dipinjam'
+      WHERE id_peminjaman = $1
+    `,
+      [peminjaman.id_peminjaman]
+    );
+
+    res.json({ message: 'Berhasil scan' });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error scan' });
   }
 };

@@ -123,7 +123,23 @@ const Ico = {
       <line x1='12' y1='5' x2='12' y2='19' />
       <line x1='5' y1='12' x2='19' y2='12' />
     </svg>
-  )
+  ),
+  qr: (
+  <svg
+    width='14'
+    height='14'
+    fill='none'
+    stroke='currentColor'
+    strokeWidth='1.8'
+    viewBox='0 0 24 24'
+  >
+    <rect x='3' y='3' width='6' height='6' rx='1' />
+    <rect x='15' y='3' width='6' height='6' rx='1' />
+    <rect x='3' y='15' width='6' height='6' rx='1' />
+    <path d='M15 15h3v3' />
+    <path d='M21 15v6h-6' />
+  </svg>
+)
 }
 
 const menus = {
@@ -133,16 +149,21 @@ const menus = {
     { name: 'Alat', to: '/admin/alat', icon: Ico.tool },
     { name: 'Kategori', to: '/admin/kategori', icon: Ico.tag }
   ],
-  petugas: [
-    { name: 'Dashboard', to: '/petugas', icon: Ico.grid },
-    {
-      name: 'Verifikasi Peminjaman',
-      to: '/petugas/verifikasi',
-      icon: Ico.check
-    },
-    { name: 'Pengembalian', to: '/petugas/pengembalian', icon: Ico.return },
-    { name: 'Denda', to: '/petugas/denda', icon: Ico.alert }
-  ],
+ petugas: [
+  { name: 'Dashboard', to: '/petugas', icon: Ico.grid },
+  {
+    name: 'Verifikasi Peminjaman',
+    to: '/petugas/verifikasi',
+    icon: Ico.check
+  },
+  {
+    name: 'Scan QR',
+    to: '/petugas/scan',
+    icon: Ico.qr
+  },
+  { name: 'Pengembalian', to: '/petugas/pengembalian', icon: Ico.return },
+  { name: 'Denda', to: '/petugas/denda', icon: Ico.alert }
+],
   peminjam: [
     { name: 'Dashboard', to: '/peminjam', icon: Ico.grid },
     { name: 'Daftar Alat', to: '/peminjam/alat', icon: Ico.list },
@@ -199,9 +220,9 @@ export default function Sidebar () {
             to={item.to}
             end
             className={({ isActive }) =>
-              `mb-0.5 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors ${
+              `mb-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all ${
                 isActive
-                  ? 'bg-gray-100 text-gray-900'
+                  ? 'bg-gray-100 text-gray-900 shadow-sm'
                   : 'text-gray-400 hover:bg-gray-50 hover:text-gray-700'
               }`
             }

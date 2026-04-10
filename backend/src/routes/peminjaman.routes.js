@@ -13,5 +13,6 @@ router.patch("/:id/status", verifyToken, isPetugas, peminjamanController.updateS
 router.get("/aktif", verifyToken, isPeminjam, peminjamanController.getPeminjamanAktifUser);
 // router.get('/peminjaman/:id/unit', peminjamanController.getDetailUnitPeminjaman)
 router.get("/:id/struk", verifyToken, peminjamanController.getStrukPeminjaman);
+router.post("/scan", verifyToken, isPetugas, peminjamanController.scanQrPengambilan);
 
 module.exports = router;
