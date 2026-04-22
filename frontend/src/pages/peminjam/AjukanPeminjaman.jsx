@@ -1,22 +1,21 @@
-import { useState } from 'react'
+// AjukanPeminjaman.jsx - Versi Modern Minimalis
+import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import api from '../../lib/api'
-import { useEffect } from 'react'
 import { io } from 'socket.io-client'
-import { useRef } from 'react'
-import { QRCodeCanvas } from 'qrcode.react'
+import api from '../../lib/api'
+import Toast from '../../components/Toast'
 
 const inputCls =
-  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 placeholder:text-gray-300'
+  'w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-gray-300 focus:ring-2 focus:ring-gray-100 placeholder:text-gray-400'
 
-function Field ({ label, hint, children }) {
+function Field ({ label, hint, children, required = false }) {
   return (
     <div className='flex flex-col gap-1'>
-      <label className='text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
-        {label}
+      <label className='text-[11px] font-medium text-gray-500'>
+        {label} {required && <span className='text-red-400'>*</span>}
       </label>
       {children}
-      {hint && <p className='text-[11px] text-gray-400'>{hint}</p>}
+      {hint && <p className='text-[10px] text-gray-400'>{hint}</p>}
     </div>
   )
 }
@@ -24,311 +23,190 @@ function Field ({ label, hint, children }) {
 export default function AjukanPeminjaman () {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const socketRef = useRef(null)
+
   const [jumlah, setJumlah] = useState('')
   const [tglPinjam, setTglPinjam] = useState('')
   const [tglKembali, setTglKembali] = useState('')
-  const [modal, setModal] = useState({ show: false, type: '', message: '' })
-  const [isBlocked, setIsBlocked] = useState(false)
-  const [statusPinjam, setStatusPinjam] = useState('')
-  const [alatDetail, setAlatDetail] = useState(null)
-  const [peminjamanId, setPeminjamanId] = useState(null)
-  const [unitList, setUnitList] = useState([])
-  const hasStruk = unitList.length > 0
-  const socketRef = useRef(null)
-  const location = useLocation()
-  const [loadingAlat, setLoadingAlat] = useState(true)
-  const [statusAktif, setStatusAktif] = useState(null)
-  const [isTransitioning, setIsTransitioning] = useState(false)
+  const [deskripsi, setDeskripsi] = useState('')
   const [errorJumlah, setErrorJumlah] = useState('')
-  const [statusPengambilan, setStatusPengambilan] = useState(null)
-  const [qrToken, setQrToken] = useState(null)
+  const [toast, setToast] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    socketRef.current = io('http://localhost:3000')
+  const [isBlocked, setIsBlocked] = useState(false)
+  const [jumlahAktif, setJumlahAktif] = useState(0)
+  const [statusAktif, setStatusAktif] = useState(null)
+  const [newPeminjamanId, setNewPeminjamanId] = useState(null)
 
-    return () => socketRef.current.disconnect()
-  }, [])
+  const [alatDetail, setAlatDetail] = useState(null)
+  const [loadingAlat, setLoadingAlat] = useState(true)
+
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type })
+  }
+
+  const closeToast = () => {
+    setToast({ show: false, message: '', type: 'success' })
+  }
 
   useEffect(() => {
     const init = async () => {
       try {
         if (location.state?.alat) {
           setAlatDetail(location.state.alat)
-          return
-        }
-
-        if (id) {
+        } else if (id) {
           const res = await api.get(`/alat/${id}`)
           setAlatDetail(res.data.data)
         }
       } catch (err) {
-        console.log('Gagal ambil alat')
+        console.error('Gagal ambil detail alat')
+        showToast('Gagal memuat detail alat', 'error')
       } finally {
         setLoadingAlat(false)
       }
     }
-
     init()
   }, [id, location.state])
 
+  // Cek status peminjaman aktif
   const checkPeminjaman = async () => {
     try {
       const res = await api.get('/peminjaman/aktif')
+      const { data, total_aktif, is_blocked } = res.data
 
-      const aktif = res.data.data.find(p =>
-        ['menunggu', 'disetujui', 'dipinjam'].includes(p.status)
+      setJumlahAktif(total_aktif)
+      setIsBlocked(is_blocked)
+
+      const aktifAlat = data.find(
+        p =>
+          String(p.id_alat) === String(id) &&
+          ['menunggu', 'disetujui', 'dipinjam'].includes(p.status)
       )
 
-      if (aktif) {
-        setIsBlocked(true)
-        setStatusAktif(aktif.status)
-        setPeminjamanId(aktif.id_peminjaman)
-        setStatusPengambilan(aktif.status_pengambilan)
+      if (aktifAlat) {
+        setStatusAktif(aktifAlat.status)
       } else {
-        setIsBlocked(false)
+        setStatusAktif(null)
       }
     } catch (err) {
-      console.log(err)
+      console.error(err)
     }
   }
 
   useEffect(() => {
     checkPeminjaman()
-  }, [location.pathname])
+  }, [id])
+
+  useEffect(() => {
+    const interval = setInterval(checkPeminjaman, 5000)
+    return () => clearInterval(interval)
+  }, [id])
+
+  useEffect(() => {
+    socketRef.current = io('http://localhost:3000')
+    socketRef.current.on('peminjaman_disetujui', data => {
+      if (
+        newPeminjamanId &&
+        String(data.id_peminjaman) === String(newPeminjamanId)
+      ) {
+        showToast('Peminjaman Anda telah disetujui!', 'success')
+        setTimeout(() => {
+          navigate(`/peminjam/struk/${newPeminjamanId}`)
+        }, 1500)
+      }
+    })
+    return () => socketRef.current.disconnect()
+  }, [newPeminjamanId, navigate])
+
+  useEffect(() => {
+    if (tglPinjam && tglKembali && tglKembali <= tglPinjam) {
+      setTglKembali('')
+    }
+  }, [tglPinjam])
+
+  const tambahSatuHari = dateStr => {
+    if (!dateStr) return ''
+    const d = new Date(dateStr)
+    d.setDate(d.getDate() + 1)
+    return d.toISOString().split('T')[0]
+  }
+
+  const diffDays =
+    tglPinjam && tglKembali
+      ? Math.ceil(
+          Math.abs(new Date(tglKembali) - new Date(tglPinjam)) /
+            (1000 * 60 * 60 * 24)
+        )
+      : 0
+
+  const perluDeskripsi = diffDays > 7
 
   const submit = async e => {
     e.preventDefault()
+    const jumlahNum = Number(jumlah)
 
-    if (tglKembali <= tglPinjam) {
-      setModal({
-        show: true,
-        type: 'error',
-        message: 'Tanggal kembali minimal 1 hari setelah tanggal pinjam'
-      })
+    if (jumlahNum > 5 || jumlahNum <= 0) {
+      showToast('Jumlah harus antara 1-5 alat', 'error')
+      return
+    }
+    if (jumlahNum > alatDetail?.stok) {
+      showToast(`Stok hanya tersedia ${alatDetail?.stok} unit`, 'error')
+      return
+    }
+    if (!tglPinjam || !tglKembali) {
+      showToast('Tanggal pinjam dan kembali harus diisi', 'error')
+      return
+    }
+    if (new Date(tglKembali) <= new Date(tglPinjam)) {
+      showToast('Tanggal kembali harus setelah tanggal pinjam', 'error')
+      return
+    }
+    if (perluDeskripsi && !deskripsi.trim()) {
+      showToast(
+        'Durasi lebih dari 7 hari. Wajib isi alasan pengajuan.',
+        'error'
+      )
       return
     }
 
+    setSubmitting(true)
     try {
       const res = await api.post('/peminjaman', {
         id_alat: id,
         tgl_pinjam: tglPinjam,
         tgl_rencana_kembali: tglKembali,
-        jumlah
+        jumlah: jumlahNum,
+        deskripsi: deskripsi.trim() || null
       })
 
-      setPeminjamanId(res.data.id_peminjaman)
+      setNewPeminjamanId(res.data.id_peminjaman)
+      showToast(
+        res.data.perlu_persetujuan_khusus
+          ? `Pengajuan ${diffDays} hari berhasil dikirim dan menunggu persetujuan khusus admin.`
+          : 'Peminjaman berhasil diajukan dan menunggu verifikasi petugas.',
+        'success'
+      )
 
-      localStorage.setItem('peminjaman_id', res.data.id_peminjaman)
-      setModal({
-        show: true,
-        type: 'success',
-        message: 'Peminjaman berhasil diajukan dan menunggu verifikasi petugas.'
-      })
+      setTimeout(() => {
+        navigate('/peminjam')
+      }, 2000)
     } catch (err) {
-      setModal({
-        show: true,
-        type: 'error',
-        message:
-          err.response?.data?.message ||
-          'Terjadi kesalahan saat mengajukan peminjaman'
-      })
+      showToast(
+        err.response?.data?.message || 'Gagal mengajukan peminjaman',
+        'error'
+      )
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  const fetchStruk = async () => {
-    try {
-      const res = await api.get(`/peminjaman/${peminjamanId}/struk`)
-      console.log('STRUK:', res.data)
-      console.log('PEMINJAMAN ID:', peminjamanId)
-
-      if (res.data.data.length > 0) {
-        setUnitList(res.data.data)
-        setQrToken(res.data.data[0].qr_token)
-      }
-    } catch (err) {
-      console.log(err)
-    }
-  }
-
-  useEffect(() => {
-    if (!peminjamanId) return
-
-    fetchStruk()
-  }, [peminjamanId])
-
-  useEffect(() => {
-    const storedId = localStorage.getItem('peminjaman_id')
-    if (storedId) {
-      setPeminjamanId(storedId)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!socketRef.current) return
-
-    socketRef.current.on('peminjaman_disetujui', data => {
-      if (data.id_peminjaman == peminjamanId) {
-        console.log('REALTIME MASUK 🔥')
-        fetchStruk()
-      }
-    })
-
-    return () => {
-      socketRef.current.off('peminjaman_disetujui')
-    }
-  }, [peminjamanId])
-
-  useEffect(() => {
-    if (hasStruk) {
-      document.body.style.overflow = 'hidden'
-      document.documentElement.style.overflow = 'hidden' // 🔥 penting
-    } else {
-      document.body.style.overflow = 'auto'
-      document.documentElement.style.overflow = 'auto'
-    }
-
-    return () => {
-      document.body.style.overflow = 'auto'
-      document.documentElement.style.overflow = 'auto'
-    }
-  }, [hasStruk])
-
-  useEffect(() => {
-    setUnitList([])
-    setPeminjamanId(null)
-  }, [id])
-
-  useEffect(() => {
-    if (statusAktif === 'disetujui' || statusAktif === 'dipinjam') {
-      fetchStruk()
-    }
-  }, [statusAktif])
-
-  useEffect(() => {
-    if (statusAktif === 'selesai') {
-      setUnitList([])
-      setPeminjamanId(null)
-      setIsBlocked(false)
-    }
-  }, [statusAktif])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      checkPeminjaman()
-    }, 5000)
-
-    return () => clearInterval(interval)
-  }, [])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      checkPeminjaman()
-    }, 5000)
-
-    return () => clearInterval(interval)
-  }, [])
-
-  const tambahSatuHari = dateStr => {
-    if (!dateStr) return ''
-
-    const d = new Date(dateStr)
-    d.setDate(d.getDate() + 1)
-
-    return d.toISOString().split('T')[0]
-  }
-
-  useEffect(() => {
-    if (tglPinjam && tglKembali) {
-      if (tglKembali <= tglPinjam) {
-        setTglKembali('')
-      }
-    }
-  }, [tglPinjam])
-
-  const formatWIB = date => {
+  if (loadingAlat) {
     return (
-      new Date(date).toLocaleString('id-ID', {
-        timeZone: 'Asia/Jakarta',
-        day: '2-digit',
-        month: 'long',
-        year: 'numeric'
-      }) + ' WIB'
-    )
-  }
-
-  console.log('ID:', id)
-  console.log('STATE:', location.state)
-  console.log('ALAT:', alatDetail)
-
-  if (hasStruk) {
-    return (
-      <div className='h-screen flex items-center justify-center px-4 bg-gray-100 overflow-hidden'>
-        {' '}
-        <div className='w-full max-w-md bg-white rounded-2xl shadow-2xl border p-6 relative overflow-hidden'>
-          {' '}
-          <div className='text-center mb-5'>
-            <h1 className='text-xl font-bold text-gray-900'>
-              🧾 Struk Peminjaman
-            </h1>
-            <p className='text-xs text-gray-400'>
-              Simpan atau screenshot sebagai bukti
-            </p>
-          </div>
-          {statusPengambilan === 'belum_diambil' && (
-            <div className='mb-4 p-3 text-sm bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg'>
-              📍 Silakan datang ke petugas untuk scan QR dan mengambil barang
-            </div>
-          )}
-          <div className='space-y-2 text-sm text-gray-700 mb-4'>
-            <p>
-              <b>ID:</b> {unitList[0]?.id_peminjaman}
-            </p>
-            <p>
-              <b>Alat:</b> {unitList[0]?.alat}
-            </p>
-            <p>
-              <b>Tanggal Pinjam:</b> {formatWIB(unitList[0]?.tgl_pinjam)}
-            </p>
-            <p>
-              <b>Kembali:</b> {formatWIB(unitList[0]?.tgl_rencana_kembali)}
-            </p>
-          </div>
-          <div className='flex justify-center my-4'>
-            <QRCodeCanvas
-              value={qrToken || ''}
-              includeMargin={true}
-              size={260}
-            />
-          </div>
-          <div className='border-t pt-4'>
-            <p className='text-xs text-gray-500 mb-2'>Kode Unit</p>
-
-            <div className='grid grid-cols-2 gap-2'>
-              {unitList.map(u => (
-                <div
-                  key={u.kode_unit}
-                  className='border rounded-lg p-2 text-center font-mono text-xs bg-gray-100'
-                >
-                  {u.kode_unit}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className='mt-6 space-y-2'>
-            <button
-              onClick={() => window.print()}
-              className='w-full bg-black text-white py-2 rounded-lg text-xs'
-            >
-              Print / Simpan
-            </button>
-
-            <button
-              onClick={() => navigate('/peminjam')}
-              className='w-full border py-2 rounded-lg text-xs text-gray-600'
-            >
-              Kembali ke Daftar Alat
-            </button>
-          </div>
+      <div className='flex items-center justify-center h-64'>
+        <div className='flex flex-col items-center gap-2'>
+          <div className='h-8 w-8 border-2 border-gray-200 border-t-gray-600 rounded-full animate-spin' />
+          <p className='text-sm text-gray-400'>Memuat data alat...</p>
         </div>
       </div>
     )
@@ -336,17 +214,30 @@ export default function AjukanPeminjaman () {
 
   if (!alatDetail) {
     return (
-      <div className='flex flex-col items-center justify-center h-screen text-center px-4'>
-        <h2 className='text-lg font-semibold text-gray-700'>
-          ⚠️ Belum memilih alat
+      <div className='flex flex-col items-center justify-center py-16 text-center'>
+        <div className='mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100'>
+          <svg
+            width='28'
+            height='28'
+            fill='none'
+            stroke='#9ca3af'
+            strokeWidth='1.5'
+            viewBox='0 0 24 24'
+          >
+            <rect x='3' y='3' width='18' height='18' rx='2' />
+            <circle cx='8.5' cy='8.5' r='1.5' />
+            <polyline points='21,15 16,10 5,21' />
+          </svg>
+        </div>
+        <h2 className='text-base font-semibold text-gray-700'>
+          Belum Memilih Alat
         </h2>
         <p className='text-sm text-gray-400 mt-1'>
-          Silakan pilih alat terlebih dahulu sebelum mengajukan peminjaman
+          Silakan pilih alat terlebih dahulu
         </p>
-
         <button
           onClick={() => navigate('/peminjam/alat')}
-          className='mt-4 px-4 py-2 text-xs bg-gray-900 text-white rounded-lg'
+          className='mt-4 rounded-md bg-gray-900 px-4 py-2 text-xs font-medium text-white hover:bg-gray-800 transition'
         >
           Pilih Alat
         </button>
@@ -354,102 +245,153 @@ export default function AjukanPeminjaman () {
     )
   }
 
-  if (loadingAlat) {
-    return (
-      <div className='flex justify-center items-center h-screen text-gray-400'>
-        Memuat data alat...
-      </div>
-    )
-  }
-
+  // Status Menunggu
   if (statusAktif === 'menunggu') {
     return (
-      <div className='min-h-screen flex items-center justify-center text-center px-4'>
-        <div className='bg-white p-6 rounded-xl shadow border max-w-sm'>
-          <h2 className='text-lg font-semibold text-gray-800'>
-            ⏳ Menunggu Persetujuan
-          </h2>
-          <p className='text-sm text-gray-400 mt-2'>
-            Peminjaman kamu sedang diproses oleh petugas.
-          </p>
-
-          <button
-            onClick={() => navigate('/peminjam')}
-            className='mt-4 px-4 py-2 text-xs bg-gray-900 text-white rounded-lg'
+      <div className='flex flex-col items-center justify-center py-16 text-center'>
+        <div className='mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100'>
+          <svg
+            width='28'
+            height='28'
+            fill='none'
+            stroke='#d97706'
+            strokeWidth='1.5'
+            viewBox='0 0 24 24'
           >
-            Kembali
-          </button>
+            <circle cx='12' cy='12' r='10' />
+            <polyline points='12 6 12 12 16 14' />
+          </svg>
         </div>
+        <h2 className='text-base font-semibold text-gray-700'>
+          Menunggu Persetujuan
+        </h2>
+        <p className='text-sm text-gray-400 mt-1'>
+          Peminjaman alat ini sedang diproses oleh petugas
+        </p>
+        <button
+          onClick={() => navigate('/peminjam/alat')}
+          className='mt-4 rounded-md bg-gray-900 px-4 py-2 text-xs font-medium text-white hover:bg-gray-800 transition'
+        >
+          Kembali ke Daftar Alat
+        </button>
       </div>
     )
   }
 
-  if (statusAktif === 'selesai') {
+  // Status Aktif (Disetujui/Dipinjam)
+  if (statusAktif === 'disetujui' || statusAktif === 'dipinjam') {
     return (
-      <div>
-        <h2>Silakan pilih alat</h2>
+      <div className='flex flex-col items-center justify-center py-16 text-center'>
+        <div className='mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100'>
+          <svg
+            width='28'
+            height='28'
+            fill='none'
+            stroke='#10b981'
+            strokeWidth='1.5'
+            viewBox='0 0 24 24'
+          >
+            <polyline points='20,6 9,17 4,12' />
+          </svg>
+        </div>
+        <h2 className='text-base font-semibold text-gray-700'>
+          Peminjaman Aktif
+        </h2>
+        <p className='text-sm text-gray-400 mt-1'>
+          Alat ini sedang dalam peminjaman aktif
+        </p>
+        <button
+          onClick={() => navigate('/peminjam')}
+          className='mt-4 rounded-md bg-gray-900 px-4 py-2 text-xs font-medium text-white hover:bg-gray-800 transition'
+        >
+          Kembali ke Dashboard
+        </button>
       </div>
     )
   }
-
-  if (isTransitioning) {
-    return (
-      <div className='h-screen flex items-center justify-center'>
-        <div className='animate-pulse text-gray-400 text-sm'>Memproses...</div>
-      </div>
-    )
-  }
-
-  console.log('QR TOKEN FINAL:', qrToken)
 
   return (
-    <div className='mx-auto max-w-md'>
+    <div className='max-w-md mx-auto'>
+      {toast && toast.show && (
+        <Toast message={toast.message} type={toast.type} onClose={closeToast} />
+      )}
+
       {/* Header */}
-      <div className='mb-6'>
-        <h1 className='text-[20px] font-bold tracking-tight text-gray-900'>
+      <div className='mb-5'>
+        <h1 className='text-lg font-semibold tracking-tight text-gray-900'>
           Ajukan Peminjaman
         </h1>
-        <p className='mt-0.5 text-sm text-gray-400'>
+        <p className='text-sm text-gray-400 mt-0.5'>
           Alat:{' '}
-          <span className='font-semibold text-gray-700'>
-            {alatDetail?.name}
-          </span>
+          <span className='font-medium text-gray-700'>{alatDetail?.name}</span>
         </p>
       </div>
 
-      {statusPengambilan === 'sudah_diambil' && (
-        <div className='mb-4 p-3 text-sm bg-green-50 border border-green-200 text-green-700 rounded-lg'>
-          ✅ Barang sudah diambil
+      {/* Info Alat */}
+      <div className='mb-4 rounded-lg border border-gray-100 bg-white p-3 shadow-sm'>
+        <div className='flex items-start gap-2'>
+          <div className='p-1 rounded-md bg-gray-100 text-gray-500'>
+            <svg
+              width='14'
+              height='14'
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='1.5'
+              viewBox='0 0 24 24'
+            >
+              <path d='M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z' />
+            </svg>
+          </div>
+          <div className='flex-1'>
+            <p className='text-xs text-gray-500'>
+              <span className='font-medium text-gray-700'>Merk:</span>{' '}
+              {alatDetail?.merk || '-'}
+            </p>
+            <p className='text-xs text-gray-500 mt-0.5'>
+              <span className='font-medium text-gray-700'>Model:</span>{' '}
+              {alatDetail?.tipe_model || '-'}
+            </p>
+            <p className='text-xs text-gray-400 mt-1'>
+              {alatDetail?.spesifikasi || '-'}
+            </p>
+          </div>
         </div>
-      )}
+      </div>
 
-      {alatDetail && (
-        <div className='mb-4 text-xs text-gray-500 space-y-1'>
-          <p>Merk: {alatDetail?.merk || '-'}</p>
-          <p>Model: {alatDetail?.tipe_model || '-'}</p>
-          <p className='text-[11px] text-gray-400'>
-            {alatDetail?.spesifikasi || '-'}
-          </p>
-        </div>
-      )}
-
+      {/* Blocked Warning */}
       {isBlocked && (
-        <div className='mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600'>
-          ⚠️ Kamu masih memiliki peminjaman aktif. Selesaikan terlebih dahulu
-          sebelum meminjam lagi.
+        <div className='mb-4 rounded-md bg-red-50 border border-red-100 p-3'>
+          <div className='flex items-center gap-2'>
+            <svg
+              width='14'
+              height='14'
+              fill='none'
+              stroke='#ef4444'
+              strokeWidth='2'
+              viewBox='0 0 24 24'
+            >
+              <circle cx='12' cy='12' r='10' />
+              <line x1='12' y1='8' x2='12' y2='12' />
+              <line x1='12' y1='16' x2='12.01' y2='16' />
+            </svg>
+            <p className='text-xs text-red-600'>
+              Kamu sudah mencapai batas 5 peminjaman aktif. Selesaikan salah
+              satu terlebih dahulu.
+            </p>
+          </div>
         </div>
       )}
 
-      {/* Form card */}
-      <div className='rounded-xl border border-gray-200 bg-white'>
-        <div className='border-b border-gray-100 px-5 py-3.5'>
-          <span className='text-sm font-semibold text-gray-800'>
+      {/* Form Card */}
+      <div className='rounded-lg border border-gray-100 bg-white overflow-hidden shadow-sm'>
+        <div className='border-b border-gray-100 px-4 py-3 bg-gray-50/50'>
+          <h2 className='text-sm font-semibold text-gray-900'>
             Detail Peminjaman
-          </span>
+          </h2>
         </div>
 
-        <form onSubmit={submit} className='space-y-4 p-5'>
-          <Field label='Tanggal Pinjam'>
+        <form onSubmit={submit} className='p-4 space-y-4'>
+          <Field label='Tanggal Pinjam' required>
             <input
               type='date'
               min={new Date().toISOString().split('T')[0]}
@@ -461,29 +403,30 @@ export default function AjukanPeminjaman () {
             />
           </Field>
 
-          <Field label='Jumlah' hint='Sesuaikan dengan stok tersedia'>
+          <Field
+            label='Jumlah'
+            hint={`Maksimal 5 unit • Stok tersedia: ${alatDetail?.stok}`}
+            required
+          >
             <input
               type='number'
               min='1'
+              max='5'
               required
               className={`${inputCls} ${
-                errorJumlah ? 'border-red-500 focus:ring-red-100' : ''
+                errorJumlah ? 'border-red-300 focus:ring-red-100' : ''
               }`}
               value={jumlah}
               onChange={e => {
                 const value = e.target.value
-
                 setJumlah(value)
-
                 const numberValue = Number(value)
-
                 if (!value) {
                   setErrorJumlah('')
                   return
                 }
-
                 if (numberValue > alatDetail?.stok) {
-                  setErrorJumlah(`Stok hanya tersedia ${alatDetail?.stok}`)
+                  setErrorJumlah(`Stok hanya tersedia ${alatDetail?.stok} unit`)
                 } else if (numberValue <= 0) {
                   setErrorJumlah('Jumlah minimal 1')
                 } else {
@@ -493,11 +436,11 @@ export default function AjukanPeminjaman () {
               disabled={isBlocked}
             />
             {errorJumlah && (
-              <p className='text-[11px] text-red-500 mt-1'>{errorJumlah}</p>
+              <p className='text-[10px] text-red-500 mt-1'>{errorJumlah}</p>
             )}
           </Field>
 
-          <Field label='Rencana Pengembalian'>
+          <Field label='Rencana Pengembalian' required>
             <input
               type='date'
               min={
@@ -513,97 +456,105 @@ export default function AjukanPeminjaman () {
             />
           </Field>
 
-          {/* Info notice */}
-          <div className='flex items-start gap-2.5 rounded-lg border border-amber-100 bg-amber-50 p-3'>
-            <svg
-              className='mt-0.5 shrink-0 text-amber-500'
-              width='13'
-              height='13'
-              fill='none'
-              stroke='currentColor'
-              strokeWidth='2'
-              viewBox='0 0 24 24'
+          {/* Durasi Info */}
+          {diffDays > 0 && (
+            <div
+              className={`rounded-md p-2 text-[10px] font-medium ${
+                diffDays > 7
+                  ? 'bg-orange-50 text-orange-600 border border-orange-100'
+                  : 'bg-blue-50 text-blue-600 border border-blue-100'
+              }`}
             >
-              <circle cx='12' cy='12' r='10' />
-              <line x1='12' y1='8' x2='12' y2='12' />
-              <line x1='12' y1='16' x2='12.01' y2='16' />
-            </svg>
-            <p className='text-[12px] text-amber-700'>
-              Pengajuan akan menunggu persetujuan petugas sebelum alat dapat
-              diambil.
+              {diffDays > 7
+                ? `⚠️ Durasi ${diffDays} hari melebihi batas normal (7 hari). Wajib isi alasan.`
+                : `✅ Durasi peminjaman: ${diffDays} hari`}
+            </div>
+          )}
+
+          <Field
+            label={perluDeskripsi ? 'Alasan Peminjaman' : 'Catatan (Opsional)'}
+            hint={
+              perluDeskripsi ? 'Jelaskan alasan durasi lebih dari 7 hari' : ''
+            }
+            required={perluDeskripsi}
+          >
+            <textarea
+              rows={2}
+              className={`${inputCls} resize-none ${
+                perluDeskripsi
+                  ? 'border-orange-200 focus:border-orange-300'
+                  : ''
+              }`}
+              placeholder={
+                perluDeskripsi
+                  ? 'Contoh: Bootcamp 10 hari di luar kota...'
+                  : 'Tambahkan catatan jika ada...'
+              }
+              value={deskripsi}
+              onChange={e => setDeskripsi(e.target.value)}
+              disabled={isBlocked}
+            />
+          </Field>
+
+          {/* Kuota Info */}
+          <div className='rounded-md bg-gray-50 p-2 text-center'>
+            <p className='text-[10px] text-gray-500'>
+              Kuota peminjaman aktif:{' '}
+              <span className='font-semibold text-gray-700'>
+                {jumlahAktif}/5
+              </span>
             </p>
           </div>
 
+          {/* Info Note */}
+          <div className='rounded-md bg-amber-50 border border-amber-100 p-2'>
+            <div className='flex items-start gap-1.5'>
+              <svg
+                width='12'
+                height='12'
+                fill='none'
+                stroke='#d97706'
+                strokeWidth='2'
+                viewBox='0 0 24 24'
+                className='mt-0.5'
+              >
+                <circle cx='12' cy='12' r='10' />
+                <line x1='12' y1='8' x2='12' y2='12' />
+                <line x1='12' y1='16' x2='12.01' y2='16' />
+              </svg>
+              <p className='text-[10px] text-amber-700'>
+                Pengajuan akan menunggu persetujuan petugas sebelum alat dapat
+                diambil.
+              </p>
+            </div>
+          </div>
+
+          {/* Submit Button */}
           <button
             type='submit'
-            disabled={isBlocked}
-            className={`w-full rounded-lg py-2.5 text-sm font-semibold text-white transition ${
-              isBlocked
+            disabled={isBlocked || submitting}
+            className={`w-full rounded-md py-2 text-sm font-medium text-white transition ${
+              isBlocked || submitting
                 ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-gray-900 hover:bg-gray-700'
+                : 'bg-gray-900 hover:bg-gray-800'
             }`}
           >
-            {isBlocked ? 'Tidak bisa meminjam' : 'Ajukan Peminjaman'}
+            {submitting
+              ? 'Memproses...'
+              : isBlocked
+              ? 'Tidak bisa meminjam'
+              : 'Ajukan Peminjaman'}
           </button>
         </form>
       </div>
 
-      {/* Modal */}
-      {modal.show && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px]'>
-          <div className='w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 shadow-xl text-center'>
-            <div
-              className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full ${
-                modal.type === 'success' ? 'bg-green-50' : 'bg-red-50'
-              }`}
-            >
-              {modal.type === 'success' ? (
-                <svg
-                  width='22'
-                  height='22'
-                  fill='none'
-                  stroke='#16a34a'
-                  strokeWidth='2.5'
-                  viewBox='0 0 24 24'
-                >
-                  <polyline points='20,6 9,17 4,12' />
-                </svg>
-              ) : (
-                <svg
-                  width='22'
-                  height='22'
-                  fill='none'
-                  stroke='#ef4444'
-                  strokeWidth='2.5'
-                  viewBox='0 0 24 24'
-                >
-                  <line x1='18' y1='6' x2='6' y2='18' />
-                  <line x1='6' y1='6' x2='18' y2='18' />
-                </svg>
-              )}
-            </div>
-            <h3 className='mb-1 text-[15px] font-bold text-gray-900'>
-              {modal.type === 'success' ? 'Berhasil Diajukan' : 'Gagal'}
-            </h3>
-            <p className='mb-5 text-sm text-gray-400'>{modal.message}</p>
-            <button
-              onClick={() => {
-                setModal({ ...modal, show: false })
-                setIsTransitioning(true)
-
-                setTimeout(() => {
-                  setStatusAktif('menunggu')
-                  setIsBlocked(true)
-                  setIsTransitioning(false)
-                }, 300)
-              }}
-              className='rounded-lg border border-gray-200 px-5 py-2 text-xs font-medium text-gray-500 hover:bg-gray-50 transition'
-            >
-              Tutup
-            </button>
-          </div>
-        </div>
-      )}
+      <style>{`
+        @keyframes modalFadeIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .modal-animate { animation: modalFadeIn 0.2s ease-out; }
+      `}</style>
     </div>
   )
 }

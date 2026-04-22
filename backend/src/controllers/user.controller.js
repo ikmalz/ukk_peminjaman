@@ -69,7 +69,7 @@ exports.getAllUsers = async (req, res) => {
     const result = await db.query(query);
 
     res.json({
-      message: "Data user berhasil diambil",
+      message: "Data user berhasil diambil",      
       data: result.rows,
     });
   } catch (err) {
@@ -218,4 +218,36 @@ exports.changePassword = async (req, res) => {
   );
 
   res.json({ message: "Password berhasil diubah" });
+};
+
+exports.deleteUser = async (req, res) => {
+  const { id } = req.params;
+
+  if (req.user.id_user == id) {
+    return res.status(400).json({
+      message: "Tidak boleh menghapus akun sendiri",
+    });
+  }
+
+  try {
+    const check = await db.query(
+      "SELECT role FROM users WHERE id_user = $1",
+      [id]
+    );
+
+    if (check.rows.length === 0) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
+    }
+
+    if (check.rows[0].role === "admin") {
+      return res.status(403).json({ message: "Tidak bisa menghapus akun admin" });
+    }
+
+    await db.query("DELETE FROM users WHERE id_user = $1", [id]);
+
+    res.json({ message: "User berhasil dihapus" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Gagal menghapus user" });
+  }
 };

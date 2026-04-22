@@ -19,6 +19,13 @@ import DendaPetugas from './pages/petugas/DendaPetugas'
 import DetailAlat from './pages/peminjam/DetailAlat'
 import AlatUnit from './pages/admin/AlatUnit'
 import ScanQR from './pages/petugas/ScanQR'
+import LogAktivitas from './pages/admin/LogAktivitas'
+import PeminjamanAdmin from './pages/admin/PeminjamanAdmin'
+import PengembalianAdmin from './pages/admin/PengembalianAdmin'
+import StrukPeminjaman from './pages/peminjam/StrukPeminjaman'
+import KonfigurasiDenda from './pages/petugas/KonfigurasiDenda'
+import NotFound from './components/NotFound'
+import HistoryPeminjam from './pages/peminjam/HistoryPeminjam'
 
 export default function App () {
   return (
@@ -27,6 +34,7 @@ export default function App () {
         <Routes>
           <Route path='/' element={<Navigate to='/login' />} />
           <Route path='/login' element={<Login />} />
+          
 
           {/* ADMIN */}
           <Route
@@ -41,14 +49,20 @@ export default function App () {
             <Route path='users' element={<Users />} />
             <Route path='alat' element={<Alat />} />
             <Route path='kategori' element={<Kategori />} />
-            <Route path='/admin/alat/:id/unit' element={<AlatUnit />} />
+            <Route path='log' element={<LogAktivitas />} />
+            <Route path='alat/:id/unit' element={<AlatUnit />} />
+            <Route path='konfigurasi-denda' element={<KonfigurasiDenda />} />
+            <Route path='pengembalian' element={<VerifikasiPengembalian />} />
+            <Route path='verifikasi' element={<VerifikasiPeminjaman />} />
+            <Route path='denda' element={<DendaPetugas />} />
+            <Route path='scan' element={<ScanQR />} />
           </Route>
 
           {/* PETUGAS */}
           <Route
             path='/petugas'
             element={
-              <ProtectedRoute roles={['petugas']}>
+              <ProtectedRoute roles={['petugas', 'admin']}>
                 <MainLayout />
               </ProtectedRoute>
             }
@@ -57,7 +71,12 @@ export default function App () {
             <Route path='verifikasi' element={<VerifikasiPeminjaman />} />
             <Route path='pengembalian' element={<VerifikasiPengembalian />} />
             <Route path='denda' element={<DendaPetugas />} />
-            <Route path="scan" element={<ScanQR />} />
+            <Route path='konfigurasi-denda' element={<KonfigurasiDenda />} />
+            <Route path='scan' element={<ScanQR />} />
+
+            <Route path='kategori' element={<Kategori />} />
+            <Route path='alat' element={<Alat />} />
+            <Route path='alat/:id/unit' element={<AlatUnit />} />
           </Route>
 
           {/* PEMINJAM */}
@@ -76,9 +95,12 @@ export default function App () {
               element={<AjukanPeminjaman />}
             />{' '}
             <Route path='kembali' element={<PengembalianPeminjam />} />
-            <Route path='/peminjam/detail/:id' element={<DetailAlat />} />
-            <Route path='/peminjam/pinjam' element={<AjukanPeminjaman />} />
+            <Route path='detail/:id' element={<DetailAlat />} />
+            <Route path='pinjam' element={<AjukanPeminjaman />} />
+            <Route path='struk/:id' element={<StrukPeminjaman />} />
+            <Route path='history' element={<HistoryPeminjam />} />
           </Route>
+           <Route path='*' element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

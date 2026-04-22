@@ -55,3 +55,15 @@ exports.isPeminjam = (req, res, next) => {
   }
   next();
 };
+
+exports.isAdminOrPetugas = (req, res, next) => {
+  const role = req.user?.role;
+
+  if (role === 'admin' || role === 'petugas') {
+    return next();
+  }
+
+  return res.status(403).json({ 
+    message: 'Akses ditolak. Hanya Admin dan Petugas yang diperbolehkan.' 
+  });
+};

@@ -12,6 +12,7 @@ const peminjamanRoutes = require("./routes/peminjaman.routes");
 const pengembalianRoutes = require("./routes/pengembalian.routes");
 const logRoutes = require("./routes/log.routes");
 const dendaRoutes = require("./routes/denda.routes");
+const autoCancelPeminjaman = require('./utils/autoCancelPeminjaman');
 
 const app = express();
 
@@ -32,6 +33,10 @@ io.on("connection", (socket) => {
     console.log("User disconnected:", socket.id);
   });
 });
+
+autoCancelPeminjaman();
+
+console.log('✅ Auto Cancel Peminjaman Scheduler aktif (jalan setiap jam 02:00)');
 
 // MIDDLEWARE
 app.use(cors());
