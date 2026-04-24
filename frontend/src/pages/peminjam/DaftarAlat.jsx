@@ -1,4 +1,3 @@
-// DaftarAlat.jsx - Versi Modern Minimalis
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../lib/api'
 import { useNavigate } from 'react-router-dom'

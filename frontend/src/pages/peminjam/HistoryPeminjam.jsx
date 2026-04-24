@@ -1,4 +1,3 @@
-// HistoryPeminjam.jsx - Versi dengan Pagination
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
@@ -32,7 +31,6 @@ export default function HistoryPeminjam () {
     fetchHistory()
   }, [])
 
-  // Reset ke halaman 1 saat filter atau search berubah
   useEffect(() => {
     setCurrentPage(1)
   }, [filter, search])
@@ -91,7 +89,6 @@ export default function HistoryPeminjam () {
     }
   }
 
-  // Filter berdasarkan status
   const filteredByStatus = useMemo(() => {
     if (filter === 'semua') return history
     if (filter === 'aktif') {
@@ -110,7 +107,6 @@ export default function HistoryPeminjam () {
     return history
   }, [history, filter])
 
-  // Filter berdasarkan search
   const filteredData = useMemo(() => {
     if (!search.trim()) return filteredByStatus
     return filteredByStatus.filter(item =>
@@ -118,7 +114,6 @@ export default function HistoryPeminjam () {
     )
   }, [filteredByStatus, search])
 
-  // Pagination
   const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE)
   const paginatedData = filteredData.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
@@ -160,7 +155,6 @@ export default function HistoryPeminjam () {
 
   return (
     <div className='space-y-5'>
-      {/* Toast Notification */}
       {toast && (
         <Toast
           message={toast.message}
@@ -389,23 +383,43 @@ export default function HistoryPeminjam () {
                       </div>
                     )}
 
-                    {/* Keterangan Batal */}
-                    {item.keterangan_batal && (
-                      <div className='mt-3 rounded-md bg-red-50 border border-red-100 px-3 py-1.5'>
-                        <p className='text-[10px] text-red-600'>
-                          {item.keterangan_batal}
-                        </p>
+                    {item.status === 'ditolak' && item.keterangan_batal && (
+                      <div className='mt-3 rounded-md bg-red-50 border border-red-100 px-3 py-2.5'>
+                        <div className='flex items-start gap-2'>
+                          <svg
+                            width='13'
+                            height='13'
+                            fill='none'
+                            stroke='#ef4444'
+                            strokeWidth='2'
+                            viewBox='0 0 24 24'
+                            className='mt-0.5 shrink-0'
+                          >
+                            <circle cx='12' cy='12' r='10' />
+                            <line x1='12' y1='8' x2='12' y2='12' />
+                            <line x1='12' y1='16' x2='12.01' y2='16' />
+                          </svg>
+                          <div>
+                            <p className='text-[10px] font-semibold text-red-600 mb-0.5'>
+                              Alasan Penolakan
+                            </p>
+                            <p className='text-[10px] text-red-500'>
+                              {item.keterangan_batal}
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     )}
 
-                    {/* Action Buttons */}
                     <div className='mt-4 flex gap-2'>
-                      <button
-                        onClick={() => viewStruk(item.id_peminjaman)}
-                        className='flex-1 rounded-md bg-gray-900 py-3 text-xs font-medium text-white hover:bg-gray-800 transition-colors'
-                      >
-                        Lihat Struk
-                      </button>
+                      {item.status !== 'ditolak' && item.status !== 'batal' && (
+                        <button
+                          onClick={() => viewStruk(item.id_peminjaman)}
+                          className='flex-1 rounded-md bg-gray-900 py-1.5 text-xs font-medium text-white hover:bg-gray-800 transition-colors'
+                        >
+                          Lihat Struk
+                        </button>
+                      )}
                       {isActive &&
                         item.status !== 'dikembalikan' &&
                         item.status_pengambilan !== 'sudah_diambil' && (

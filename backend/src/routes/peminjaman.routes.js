@@ -23,18 +23,18 @@ router.get (
   peminjamanController.getMyPeminjaman
 );
 
-router.get('/history', verifyToken, isPeminjam, peminjamanController.getMyHistory);
+router.get (
+  '/history',
+  verifyToken,
+  isPeminjam,
+  peminjamanController.getMyHistory
+);
 
 router.get (
-  '/',
+  '/aktif',
   verifyToken,
-  (req, res, next) => {
-    if (req.user.role === 'petugas' || req.user.role === 'admin') {
-      return next ();
-    }
-    return res.status (403).json ({message: 'Akses ditolak'});
-  },
-  peminjamanController.getAllPeminjaman
+  isPeminjam,
+  peminjamanController.getPeminjamanAktifUser
 );
 
 router.get (
@@ -42,6 +42,28 @@ router.get (
   verifyToken,
   isAdmin,
   peminjamanController.getAllPeminjamanAdmin
+);
+
+router.get (
+  '/',
+  verifyToken,
+  (req, res, next) => {
+    if (req.user.role === 'petugas' || req.user.role === 'admin')
+      return next ();
+    return res.status (403).json ({message: 'Akses ditolak'});
+  },
+  peminjamanController.getAllPeminjaman
+);
+
+router.post (
+  '/scan',
+  verifyToken,
+  (req, res, next) => {
+    if (req.user.role === 'petugas' || req.user.role === 'admin')
+      return next ();
+    return res.status (403).json ({message: 'Akses ditolak'});
+  },
+  peminjamanController.scanQrPengambilan
 );
 
 router.put (
@@ -55,32 +77,13 @@ router.patch (
   '/:id/status',
   verifyToken,
   (req, res, next) => {
-    if (req.user.role === 'petugas' || req.user.role === 'admin') {
+    if (req.user.role === 'petugas' || req.user.role === 'admin')
       return next ();
-    }
     return res.status (403).json ({message: 'Akses ditolak'});
   },
   peminjamanController.updateStatusPeminjaman
 );
 
-router.get (
-  '/aktif',
-  verifyToken,
-  isPeminjam,
-  peminjamanController.getPeminjamanAktifUser
-);
-
 router.get ('/:id/struk', verifyToken, peminjamanController.getStrukPeminjaman);
 
-router.post (
-  '/scan',
-  verifyToken,
-  (req, res, next) => {
-    if (req.user.role === 'petugas' || req.user.role === 'admin') {
-      return next ();
-    }
-    return res.status (403).json ({message: 'Akses ditolak'});
-  },
-  peminjamanController.scanQrPengambilan
-);
 module.exports = router;

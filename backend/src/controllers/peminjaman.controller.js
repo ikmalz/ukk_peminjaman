@@ -1,7 +1,6 @@
 const db = require ('../config/db');
 const logAktivitas = require ('../utils/logAktivitas');
 
-// peminjaman.controller.js - Bagian createPeminjaman yang sudah diperbaiki
 exports.createPeminjaman = async (req, res) => {
   const id_user = req.user.id_user;
   const {
@@ -12,7 +11,6 @@ exports.createPeminjaman = async (req, res) => {
     deskripsi,
   } = req.body;
 
-  // Validasi input
   if (!id_alat || !tgl_pinjam || !tgl_rencana_kembali || !jumlah) {
     return res.status(400).json({ message: 'Data peminjaman wajib diisi' });
   }
@@ -31,18 +29,17 @@ exports.createPeminjaman = async (req, res) => {
       (1000 * 60 * 60 * 24)
   );
 
-  if (diffDays > 7 && (!deskripsi || deskripsi.trim() === '')) {
-    return res.status(400).json({
-      message: 'Durasi lebih dari 7 hari. Wajib mengisi alasan/deskripsi.',
-    });
-  }
+   if (diffDays > 7) {
+      return res.status(400).json({
+        message: 'Durasi peminjaman maksimal 7 hari',
+      });
+    }
 
   const client = await db.connect();
 
   try {
     await client.query('BEGIN');
 
-    // PERBAIKAN: Cek denda belum bayar melalui tabel peminjaman
     const dendaRes = await client.query(
       `SELECT 1 FROM denda d 
        JOIN pengembalian pg ON d.id_pengembalian = pg.id_pengembalian 
@@ -56,7 +53,6 @@ exports.createPeminjaman = async (req, res) => {
       return res.status(403).json({ message: 'Anda memiliki denda yang belum dibayar' });
     }
 
-    // Cek kuota peminjaman aktif
     const aktifRes = await client.query(
       `SELECT COUNT(*) AS total FROM peminjaman 
        WHERE id_user = $1 AND status IN ('menunggu','disetujui','dipinjam')`,
@@ -68,7 +64,6 @@ exports.createPeminjaman = async (req, res) => {
       return res.status(400).json({ message: 'Kamu sudah memiliki 5 peminjaman aktif' });
     }
 
-    // Cek stok alat
     const alatRes = await client.query(
       'SELECT stok, status_aktif FROM alat WHERE id_alat = $1',
       [id_alat]
@@ -145,7 +140,7 @@ exports.getAllPeminjaman = async (req, res) => {
         p.tgl_rencana_kembali,
         p.status,
         p.deskripsi,
-        -- Cara yang lebih aman untuk menghitung durasi hari
+        p.keterangan_batal,                         
         (p.tgl_rencana_kembali::date - p.tgl_pinjam::date) AS durasi_hari
       FROM peminjaman p
       JOIN users u ON p.id_user = u.id_user
@@ -153,15 +148,15 @@ exports.getAllPeminjaman = async (req, res) => {
       ORDER BY p.id_peminjaman DESC
     `;
 
-    const result = await db.query (query);
+    const result = await db.query(query);
 
-    res.json ({
+    res.json({
       message: 'Data peminjaman berhasil diambil',
       data: result.rows,
     });
   } catch (err) {
-    console.error ('GET ALL PEMINJAMAN ERROR:', err);
-    res.status (500).json ({
+    console.error('GET ALL PEMINJAMAN ERROR:', err);
+    res.status(500).json({
       message: 'Gagal mengambil data peminjaman',
     });
   }
@@ -199,52 +194,71 @@ exports.getMyPeminjaman = async (req, res) => {
 };
 
 exports.updateStatusPeminjaman = async (req, res) => {
-  const {id} = req.params;
-  let {status} = req.body;
+  const { id } = req.params;
+  let { status, keterangan_batal } = req.body; 
 
-  if (typeof status === 'string') status = status.toLowerCase ().trim ();
+  console.log('[DEBUG] body diterima:', { status, keterangan_batal })
+  console.log('==========================================')
+  console.log('[PATCH /:id/status] REQUEST MASUK')
+  console.log('Params id:', id)
+  console.log('Headers Content-Type:', req.headers['content-type'])
+  console.log('Body raw:', JSON.stringify(req.body))
+  console.log('status:', status)
+  console.log('keterangan_batal:', keterangan_batal)
+  console.log('keterangan_batal type:', typeof keterangan_batal)
+  console.log('==========================================')
 
-  if (!['disetujui', 'ditolak'].includes (status)) {
-    return res
-      .status (400)
-      .json ({message: 'Status harus "disetujui" atau "ditolak"'});
+  if (typeof status === 'string') status = status.toLowerCase().trim();
+
+  if (!['disetujui', 'ditolak'].includes(status)) {
+    return res.status(400).json({ message: 'Status harus "disetujui" atau "ditolak"' });
   }
 
-  const client = await db.connect ();
-  try {
-    await client.query ('BEGIN');
+  if (status === 'ditolak' && (!keterangan_batal || !keterangan_batal.trim())) {
+    return res.status(400).json({ message: 'Alasan penolakan wajib diisi' });
+  }
 
-    const cek = await client.query (
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+
+    const cek = await client.query(
       `SELECT id_alat, status, jumlah, id_user 
        FROM peminjaman WHERE id_peminjaman = $1 FOR UPDATE`,
       [id]
     );
 
     if (cek.rows.length === 0) {
-      await client.query ('ROLLBACK');
-      return res.status (404).json ({message: 'Peminjaman tidak ditemukan'});
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Peminjaman tidak ditemukan' });
     }
 
     const p = cek.rows[0];
 
     if (p.status !== 'menunggu') {
-      await client.query ('ROLLBACK');
-      return res.status (400).json ({
+      await client.query('ROLLBACK');
+      return res.status(400).json({
         message: `Status saat ini: ${p.status}. Tidak bisa diubah lagi.`,
       });
     }
 
-    await client.query (
+    await client.query(
       `UPDATE peminjaman 
        SET status = $1, 
-           status_pengambilan = $2, 
+           status_pengambilan = $2,
+           keterangan_batal = $3,
            updated_at = NOW()
-       WHERE id_peminjaman = $3`,
-      [status, status === 'disetujui' ? 'belum_diambil' : null, id]
+       WHERE id_peminjaman = $4`,
+      [
+        status,
+        status === 'disetujui' ? 'belum_diambil' : null,
+        status === 'ditolak' ? keterangan_batal.trim() : null,
+        id,
+      ]
     );
 
     if (status === 'disetujui') {
-      const unitRes = await client.query (
+      const unitRes = await client.query(
         `SELECT id_unit FROM alat_unit 
          WHERE id_alat = $1 AND status = 'tersedia' 
          LIMIT $2 FOR UPDATE`,
@@ -252,49 +266,51 @@ exports.updateStatusPeminjaman = async (req, res) => {
       );
 
       if (unitRes.rows.length < p.jumlah) {
-        await client.query ('ROLLBACK');
-        return res.status (400).json ({message: 'Stok unit tidak mencukupi'});
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Stok unit tidak mencukupi' });
       }
 
       for (const u of unitRes.rows) {
-        await client.query (
+        await client.query(
           `INSERT INTO peminjaman_unit (id_peminjaman, id_unit) VALUES ($1, $2)`,
           [id, u.id_unit]
         );
-        await client.query (
+        await client.query(
           `UPDATE alat_unit SET status = 'dipinjam' WHERE id_unit = $1`,
           [u.id_unit]
         );
       }
 
-      await client.query (
+      await client.query(
         `UPDATE alat SET stok = stok - $1 WHERE id_alat = $2`,
         [p.jumlah, p.id_alat]
       );
     }
 
-    await client.query ('COMMIT');
+    await client.query('COMMIT');
 
-    const io = req.app.get ('io');
-    if (io) io.emit ('peminjaman_update', {id_peminjaman: id, status});
+    const io = req.app.get('io');
+    if (io) io.emit('peminjaman_update', { id_peminjaman: id, status });
 
-    await logAktivitas ({
+    await logAktivitas({
       id_user: req.user.id_user,
-      aktivitas: `Mengubah status peminjaman ID ${id} menjadi ${status}`,
+      aktivitas: status === 'ditolak'
+        ? `Menolak peminjaman ID ${id}. Alasan: ${keterangan_batal}`
+        : `Menyetujui peminjaman ID ${id}`,
       id_peminjaman: id,
     });
 
-    res.json ({
+    res.json({
       message: status === 'disetujui'
         ? 'Peminjaman berhasil disetujui'
         : 'Peminjaman berhasil ditolak',
     });
   } catch (err) {
-    await client.query ('ROLLBACK');
-    console.error ('UPDATE STATUS ERROR:', err);
-    res.status (500).json ({message: 'Gagal memproses perubahan status'});
+    await client.query('ROLLBACK');
+    console.error('UPDATE STATUS ERROR:', err);
+    res.status(500).json({ message: 'Gagal memproses perubahan status' });
   } finally {
-    client.release ();
+    client.release();
   }
 };
 
@@ -462,7 +478,7 @@ exports.scanQrPengambilan = async (req, res) => {
 
 exports.getAllPeminjamanAdmin = async (req, res) => {
   try {
-    const result = await db.query (`
+    const result = await db.query(`
       SELECT 
         p.id_peminjaman,
         u.name AS peminjam,
@@ -474,17 +490,18 @@ exports.getAllPeminjamanAdmin = async (req, res) => {
         p.jumlah,
         p.status_pengambilan,
         p.deskripsi,
-        (p.tgl_rencana_kembali::date - p.tgl_pinjam::date) AS durasi_hari   -- ← Diubah jadi ini
+        p.keterangan_batal,                       
+        (p.tgl_rencana_kembali::date - p.tgl_pinjam::date) AS durasi_hari
       FROM peminjaman p
       JOIN users u ON p.id_user = u.id_user
       JOIN alat a ON p.id_alat = a.id_alat
       ORDER BY p.id_peminjaman DESC
     `);
 
-    res.json ({data: result.rows});
+    res.json({ data: result.rows });
   } catch (err) {
-    console.error (err);
-    res.status (500).json ({message: 'Gagal mengambil data peminjaman'});
+    console.error(err);
+    res.status(500).json({ message: 'Gagal mengambil data peminjaman' });
   }
 };
 
@@ -556,7 +573,7 @@ exports.getMyHistory = async (req, res) => {
         p.status,
         p.status_pengambilan,
         p.jumlah,
-        p.keterangan_batal,
+        p.keterangan_batal,   
         p.deskripsi,
         pu.id_unit,
         au.kode_unit
@@ -568,13 +585,13 @@ exports.getMyHistory = async (req, res) => {
       ORDER BY p.id_peminjaman DESC
     `;
 
-    const result = await db.query (query, [id_user]);
+    const result = await db.query(query, [id_user]);
 
-    res.json ({
+    res.json({
       data: result.rows,
     });
   } catch (err) {
-    console.error (err);
-    res.status (500).json ({message: 'Gagal mengambil riwayat peminjaman'});
+    console.error(err);
+    res.status(500).json({ message: 'Gagal mengambil riwayat peminjaman' });
   }
 };

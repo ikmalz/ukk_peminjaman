@@ -1,4 +1,3 @@
-// Sidebar.jsx - Versi Compact dengan Font Lebih Kecil
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useState } from 'react'
@@ -217,6 +216,12 @@ const menus = {
       icon: Ico.settings,
       category: 'settings'
     },
+    {
+      name: 'kasir denda',
+      to: '/admin/kasir-denda',
+      icon: Ico.settings,
+      category: 'settings'
+    },
     { name: 'Scan QR', to: '/admin/scan', icon: Ico.qr, category: 'tools' }
   ],
   petugas: [
@@ -284,7 +289,19 @@ const menus = {
       to: '/peminjam/history',
       icon: Ico.list,
       category: 'history'
-    }
+    },
+    {
+      name: 'Tagihan Denda',
+      to: '/peminjam/tagihan-denda',
+      icon: Ico.list,
+      category: 'history'
+    },
+    // {
+    //   name: 'Struk Denda',
+    //   to: '/peminjam/struk-denda/:id',
+    //   icon: Ico.list,
+    //   category: 'history'
+    // }
   ]
 }
 

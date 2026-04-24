@@ -1,4 +1,3 @@
-// Users.jsx - Versi dengan Toast Notification + Dropdown Aksi
 import { useEffect, useState, useRef } from 'react'
 import api from '../../lib/api'
 import Toast from '../../components/Toast'
@@ -14,7 +13,6 @@ const initials = (name = '') =>
 const inputCls =
   'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-gray-300 focus:ring-2 focus:ring-gray-100 placeholder:text-gray-300'
 
-// Komponen Dropdown Aksi
 function ActionDropdown ({
   user,
   onEdit,
@@ -25,15 +23,12 @@ function ActionDropdown ({
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
-  // Tutup dropdown saat klik di luar
   useEffect(() => {
-    const handleClickOutside = e => {
-      if (ref.current && !ref.current.contains(e.target)) {
-        setOpen(false)
-      }
+    const handler = e => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
   }, [])
 
   const handleAction = fn => {
@@ -43,7 +38,6 @@ function ActionDropdown ({
 
   return (
     <div className='relative' ref={ref}>
-      {/* Tombol Tiga Titik */}
       <button
         onClick={() => setOpen(prev => !prev)}
         className='p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors'
@@ -56,10 +50,8 @@ function ActionDropdown ({
         </svg>
       </button>
 
-      {/* Dropdown Menu */}
       {open && (
         <div className='absolute right-0 z-50 mt-1 w-44 rounded-xl border border-gray-100 bg-white shadow-lg py-1 dropdown-animate'>
-          {/* Edit */}
           <button
             onClick={() => handleAction(() => onEdit(user))}
             className='flex w-full items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors'
@@ -79,7 +71,6 @@ function ActionDropdown ({
             Edit Pengguna
           </button>
 
-          {/* Aktifkan / Nonaktifkan */}
           <button
             onClick={() => handleAction(() => onToggleStatus(user))}
             className='flex w-full items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors'
@@ -119,7 +110,6 @@ function ActionDropdown ({
             )}
           </button>
 
-          {/* Reset Password */}
           <button
             onClick={() =>
               handleAction(() => onResetPassword(user.id_user, user.name))
@@ -141,10 +131,8 @@ function ActionDropdown ({
             Reset Password
           </button>
 
-          {/* Divider */}
           <div className='my-1 border-t border-gray-100' />
 
-          {/* Hapus */}
           <button
             onClick={() =>
               handleAction(() => onDelete(user.id_user, user.name))
@@ -174,7 +162,10 @@ function ActionDropdown ({
 
 export default function Users () {
   const [users, setUsers] = useState([])
+  const [pendingUsers, setPendingUsers] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadingPending, setLoadingPending] = useState(true)
+  const [activeTab, setActiveTab] = useState('users') 
   const [modalOpen, setModalOpen] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [toast, setToast] = useState({
@@ -194,16 +185,28 @@ export default function Users () {
     try {
       const res = await api.get('/users')
       setUsers(res.data.data)
-    } catch (error) {
-      console.error('Failed to fetch users:', error)
+    } catch {
       showToast('Gagal memuat data pengguna', 'error')
     } finally {
       setLoading(false)
     }
   }
 
+  const fetchPendingUsers = async () => {
+    setLoadingPending(true)
+    try {
+      const res = await api.get('/users/pending')
+      setPendingUsers(res.data.data)
+    } catch {
+      showToast('Gagal memuat data pendaftaran', 'error')
+    } finally {
+      setLoadingPending(false)
+    }
+  }
+
   useEffect(() => {
     fetchUsers()
+    fetchPendingUsers()
   }, [])
 
   const showToast = (message, type = 'success') =>
@@ -298,6 +301,40 @@ export default function Users () {
     }
   }
 
+  const activateUser = async (id, name) => {
+    if (!confirm(`Aktivasi akun "${name}"?`)) return
+    try {
+      await api.patch(`/users/${id}/activate`)
+      showToast(`Akun "${name}" berhasil diaktivasi`, 'success')
+      fetchPendingUsers()
+      fetchUsers()
+    } catch (error) {
+      showToast(error.response?.data?.message || 'Gagal mengaktivasi', 'error')
+    }
+  }
+
+  const rejectUser = async (id, name) => {
+    if (!confirm(`Tolak pendaftaran "${name}"? Data akan dihapus permanen.`))
+      return
+    try {
+      await api.delete(`/users/${id}/reject`)
+      showToast(`Pendaftaran "${name}" berhasil ditolak`, 'success')
+      fetchPendingUsers()
+    } catch (error) {
+      showToast(
+        error.response?.data?.message || 'Gagal menolak pendaftaran',
+        'error'
+      )
+    }
+  }
+
+  const formatDate = d =>
+    new Date(d).toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    })
+
   return (
     <div>
       {toast.show && (
@@ -310,18 +347,9 @@ export default function Users () {
       )}
 
       <style>{`
-        @keyframes modalFadeIn {
-          from { opacity: 0; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        @keyframes modalBackdropFade {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes dropdownFadeIn {
-          from { opacity: 0; transform: translateY(-6px) scale(0.97); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
+        @keyframes modalFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes modalBackdropFade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes dropdownFadeIn { from { opacity: 0; transform: translateY(-6px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
         .modal-animate { animation: modalFadeIn 0.2s ease-out; }
         .backdrop-animate { animation: modalBackdropFade 0.15s ease-out; }
         .dropdown-animate { animation: dropdownFadeIn 0.15s ease-out; }
@@ -357,12 +385,14 @@ export default function Users () {
       </div>
 
       {/* Stats Summary */}
-      <div className='mb-5 grid grid-cols-3 gap-3'>
+      <div className='mb-5 grid grid-cols-4 gap-3'>
         <div className='rounded-xl border border-gray-100 bg-white p-3 shadow-sm'>
           <p className='text-[11px] font-medium text-gray-400 uppercase tracking-wider'>
             Total User
           </p>
-          <p className='text-xl font-bold text-gray-900 mt-1'>{users.length}</p>
+          <p className='text-xl font-bold text-gray-900 mt-1'>
+            {users.filter(u => u.role !== 'admin').length}
+          </p>
         </div>
         <div className='rounded-xl border border-gray-100 bg-white p-3 shadow-sm'>
           <p className='text-[11px] font-medium text-gray-400 uppercase tracking-wider'>
@@ -380,170 +410,329 @@ export default function Users () {
             {users.filter(u => u.status === 0 && u.role !== 'admin').length}
           </p>
         </div>
-      </div>
-
-      {/* User Table */}
-      <div className='rounded-xl border border-gray-100 bg-white overflow-hidden shadow-sm'>
-        <div className='overflow-x-auto'>
-          <table className='w-full text-sm'>
-            <thead>
-              <tr className='border-b border-gray-100 bg-gray-50/50'>
-                <th className='px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
-                  Pengguna
-                </th>
-                <th className='px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
-                  Role
-                </th>
-                <th className='px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
-                  Status
-                </th>
-                <th className='px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
-                  Aksi
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <tr key={i} className='border-b border-gray-50'>
-                    <td className='px-5 py-3'>
-                      <div className='flex items-center gap-2'>
-                        <div className='h-8 w-8 rounded-full bg-gray-100 animate-pulse' />
-                        <div className='space-y-1'>
-                          <div className='h-3 w-24 bg-gray-100 rounded animate-pulse' />
-                          <div className='h-2 w-32 bg-gray-50 rounded animate-pulse' />
-                        </div>
-                      </div>
-                    </td>
-                    <td className='px-5 py-3'>
-                      <div className='h-5 w-14 bg-gray-100 rounded animate-pulse' />
-                    </td>
-                    <td className='px-5 py-3'>
-                      <div className='h-5 w-16 bg-gray-100 rounded animate-pulse' />
-                    </td>
-                    <td className='px-5 py-3'>
-                      <div className='h-5 w-8 bg-gray-100 rounded animate-pulse ml-auto' />
-                    </td>
-                  </tr>
-                ))
-              ) : users.length === 0 ? (
-                <tr>
-                  <td colSpan='4' className='px-5 py-12 text-center'>
-                    <div className='flex flex-col items-center gap-2'>
-                      <svg
-                        width='40'
-                        height='40'
-                        fill='none'
-                        stroke='#d1d5db'
-                        strokeWidth='1'
-                        viewBox='0 0 24 24'
-                      >
-                        <path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' />
-                        <circle cx='9' cy='7' r='4' />
-                        <path d='M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75' />
-                      </svg>
-                      <p className='text-sm text-gray-400'>
-                        Belum ada data pengguna
-                      </p>
-                      <button
-                        onClick={openAddModal}
-                        className='text-sm text-gray-500 hover:text-gray-700'
-                      >
-                        Tambah user pertama
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                users
-                  .filter(u => u.role !== 'admin')
-                  .map(user => (
-                    <tr
-                      key={user.id_user}
-                      className='border-b border-gray-50 hover:bg-gray-50/50 transition-colors'
-                    >
-                      <td className='px-5 py-3'>
-                        <div className='flex items-center gap-3'>
-                          <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gray-100 to-gray-200 text-xs font-semibold text-gray-600'>
-                            {initials(user.name)}
-                          </div>
-                          <div>
-                            <p className='font-medium text-gray-900'>
-                              {user.name}
-                            </p>
-                            <p className='text-xs text-gray-400'>
-                              {user.email}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className='px-5 py-3'>
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
-                            user.role === 'petugas'
-                              ? 'bg-purple-50 text-purple-600'
-                              : 'bg-blue-50 text-blue-600'
-                          }`}
-                        >
-                          {user.role === 'petugas' ? (
-                            <svg
-                              width='10'
-                              height='10'
-                              fill='none'
-                              stroke='currentColor'
-                              strokeWidth='2'
-                              viewBox='0 0 24 24'
-                            >
-                              <path d='M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm10-10V7a4 4 0 0 0-8 0v4' />
-                            </svg>
-                          ) : (
-                            <svg
-                              width='10'
-                              height='10'
-                              fill='none'
-                              stroke='currentColor'
-                              strokeWidth='2'
-                              viewBox='0 0 24 24'
-                            >
-                              <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' />
-                              <circle cx='12' cy='7' r='4' />
-                            </svg>
-                          )}
-                          {user.role}
-                        </span>
-                      </td>
-                      <td className='px-5 py-3'>
-                        {user.status === 1 ? (
-                          <span className='inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-600'>
-                            <span className='h-1.5 w-1.5 rounded-full bg-green-500' />{' '}
-                            Aktif
-                          </span>
-                        ) : (
-                          <span className='inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-500'>
-                            <span className='h-1.5 w-1.5 rounded-full bg-red-400' />{' '}
-                            Nonaktif
-                          </span>
-                        )}
-                      </td>
-                      <td className='px-5 py-3 text-right'>
-                        {/* Dropdown tiga titik */}
-                        <ActionDropdown
-                          user={user}
-                          onEdit={openEditModal}
-                          onToggleStatus={toggleStatus}
-                          onResetPassword={resetPassword}
-                          onDelete={deleteUser}
-                        />
-                      </td>
-                    </tr>
-                  ))
-              )}
-            </tbody>
-          </table>
+        <div className='rounded-xl border border-gray-100 bg-white p-3 shadow-sm'>
+          <p className='text-[11px] font-medium text-gray-400 uppercase tracking-wider'>
+            Menunggu
+          </p>
+          <p className='text-xl font-bold text-amber-500 mt-1'>
+            {pendingUsers.length}
+          </p>
         </div>
       </div>
 
-      {/* Modal Popup */}
+      {/* Tabs */}
+      <div className='mb-4 flex gap-1 border-b border-gray-100'>
+        <button
+          onClick={() => setActiveTab('users')}
+          className={`px-4 py-2 text-sm font-medium transition-all border-b-2 -mb-px ${
+            activeTab === 'users'
+              ? 'border-gray-900 text-gray-900'
+              : 'border-transparent text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          Semua Pengguna
+        </button>
+        <button
+          onClick={() => setActiveTab('pending')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all border-b-2 -mb-px ${
+            activeTab === 'pending'
+              ? 'border-gray-900 text-gray-900'
+              : 'border-transparent text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          Menunggu Aktivasi
+          {pendingUsers.length > 0 && (
+            <span className='inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-400 px-1.5 text-[10px] font-bold text-white'>
+              {pendingUsers.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {activeTab === 'users' && (
+        <div className='rounded-xl border border-gray-100 bg-white overflow-hidden shadow-sm'>
+          <div className='overflow-x-auto'>
+            <table className='w-full text-sm'>
+              <thead>
+                <tr className='border-b border-gray-100 bg-gray-50/50'>
+                  <th className='px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
+                    Pengguna
+                  </th>
+                  <th className='px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
+                    Role
+                  </th>
+                  <th className='px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
+                    Status
+                  </th>
+                  <th className='px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
+                    Aksi
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <tr key={i} className='border-b border-gray-50'>
+                      <td className='px-5 py-3'>
+                        <div className='flex items-center gap-2'>
+                          <div className='h-8 w-8 rounded-full bg-gray-100 animate-pulse' />
+                          <div className='space-y-1'>
+                            <div className='h-3 w-24 bg-gray-100 rounded animate-pulse' />
+                            <div className='h-2 w-32 bg-gray-50 rounded animate-pulse' />
+                          </div>
+                        </div>
+                      </td>
+                      <td className='px-5 py-3'>
+                        <div className='h-5 w-14 bg-gray-100 rounded animate-pulse' />
+                      </td>
+                      <td className='px-5 py-3'>
+                        <div className='h-5 w-16 bg-gray-100 rounded animate-pulse' />
+                      </td>
+                      <td className='px-5 py-3'>
+                        <div className='h-5 w-8 bg-gray-100 rounded animate-pulse ml-auto' />
+                      </td>
+                    </tr>
+                  ))
+                ) : users.filter(u => u.role !== 'admin').length === 0 ? (
+                  <tr>
+                    <td colSpan='4' className='px-5 py-12 text-center'>
+                      <div className='flex flex-col items-center gap-2'>
+                        <svg
+                          width='40'
+                          height='40'
+                          fill='none'
+                          stroke='#d1d5db'
+                          strokeWidth='1'
+                          viewBox='0 0 24 24'
+                        >
+                          <path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' />
+                          <circle cx='9' cy='7' r='4' />
+                          <path d='M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75' />
+                        </svg>
+                        <p className='text-sm text-gray-400'>
+                          Belum ada data pengguna
+                        </p>
+                        <button
+                          onClick={openAddModal}
+                          className='text-sm text-gray-500 hover:text-gray-700'
+                        >
+                          Tambah user pertama
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  users
+                    .filter(u => u.role !== 'admin')
+                    .map(user => (
+                      <tr
+                        key={user.id_user}
+                        className='border-b border-gray-50 hover:bg-gray-50/50 transition-colors'
+                      >
+                        <td className='px-5 py-3'>
+                          <div className='flex items-center gap-3'>
+                            <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gray-100 to-gray-200 text-xs font-semibold text-gray-600'>
+                              {initials(user.name)}
+                            </div>
+                            <div>
+                              <p className='font-medium text-gray-900'>
+                                {user.name}
+                              </p>
+                              <p className='text-xs text-gray-400'>
+                                {user.email}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className='px-5 py-3'>
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
+                              user.role === 'petugas'
+                                ? 'bg-purple-50 text-purple-600'
+                                : 'bg-blue-50 text-blue-600'
+                            }`}
+                          >
+                            {user.role}
+                          </span>
+                        </td>
+                        <td className='px-5 py-3'>
+                          {user.status === 1 ? (
+                            <span className='inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-600'>
+                              <span className='h-1.5 w-1.5 rounded-full bg-green-500' />{' '}
+                              Aktif
+                            </span>
+                          ) : (
+                            <span className='inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-500'>
+                              <span className='h-1.5 w-1.5 rounded-full bg-red-400' />{' '}
+                              Nonaktif
+                            </span>
+                          )}
+                        </td>
+                        <td className='px-5 py-3 text-right'>
+                          <ActionDropdown
+                            user={user}
+                            onEdit={openEditModal}
+                            onToggleStatus={toggleStatus}
+                            onResetPassword={resetPassword}
+                            onDelete={deleteUser}
+                          />
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'pending' && (
+        <div className='rounded-xl border border-gray-100 bg-white overflow-hidden shadow-sm'>
+          {pendingUsers.length === 0 && !loadingPending ? (
+            <div className='flex flex-col items-center gap-2 py-16'>
+              <div className='flex h-12 w-12 items-center justify-center rounded-full bg-green-50'>
+                <svg
+                  width='22'
+                  height='22'
+                  fill='none'
+                  stroke='#16a34a'
+                  strokeWidth='2'
+                  viewBox='0 0 24 24'
+                >
+                  <polyline points='20 6 9 17 4 12' />
+                </svg>
+              </div>
+              <p className='text-sm font-medium text-gray-700'>
+                Semua sudah diproses
+              </p>
+              <p className='text-xs text-gray-400'>
+                Tidak ada pendaftaran yang menunggu aktivasi
+              </p>
+            </div>
+          ) : (
+            <div className='overflow-x-auto'>
+              <table className='w-full text-sm'>
+                <thead>
+                  <tr className='border-b border-gray-100 bg-amber-50/40'>
+                    <th className='px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
+                      Pendaftar
+                    </th>
+                    <th className='px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
+                      Role
+                    </th>
+                    <th className='px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
+                      Mendaftar
+                    </th>
+                    <th className='px-5 py-3 text-center text-[11px] font-semibold uppercase tracking-wider text-gray-400'>
+                      Aksi
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingPending
+                    ? Array.from({ length: 3 }).map((_, i) => (
+                        <tr key={i} className='border-b border-gray-50'>
+                          <td className='px-5 py-3'>
+                            <div className='flex items-center gap-2'>
+                              <div className='h-8 w-8 rounded-full bg-gray-100 animate-pulse' />
+                              <div className='space-y-1'>
+                                <div className='h-3 w-24 bg-gray-100 rounded animate-pulse' />
+                                <div className='h-2 w-32 bg-gray-50 rounded animate-pulse' />
+                              </div>
+                            </div>
+                          </td>
+                          <td className='px-5 py-3'>
+                            <div className='h-5 w-16 bg-gray-100 rounded animate-pulse' />
+                          </td>
+                          <td className='px-5 py-3'>
+                            <div className='h-3 w-24 bg-gray-100 rounded animate-pulse' />
+                          </td>
+                          <td className='px-5 py-3'>
+                            <div className='h-7 w-32 bg-gray-100 rounded animate-pulse mx-auto' />
+                          </td>
+                        </tr>
+                      ))
+                    : pendingUsers.map(user => (
+                        <tr
+                          key={user.id_user}
+                          className='border-b border-gray-50 hover:bg-amber-50/20 transition-colors'
+                        >
+                          <td className='px-5 py-3'>
+                            <div className='flex items-center gap-3'>
+                              <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-100 to-amber-200 text-xs font-semibold text-amber-700'>
+                                {initials(user.name)}
+                              </div>
+                              <div>
+                                <p className='font-medium text-gray-900'>
+                                  {user.name}
+                                </p>
+                                <p className='text-xs text-gray-400'>
+                                  {user.email}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className='px-5 py-3'>
+                            <span className='inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-600 capitalize'>
+                              {user.role}
+                            </span>
+                          </td>
+                          <td className='px-5 py-3 text-xs text-gray-400'>
+                            {user.created_at
+                              ? formatDate(user.created_at)
+                              : '-'}
+                          </td>
+                          <td className='px-5 py-3'>
+                            <div className='flex items-center justify-center gap-2'>
+                              <button
+                                onClick={() =>
+                                  activateUser(user.id_user, user.name)
+                                }
+                                className='flex items-center gap-1.5 rounded-md bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-100 transition-colors'
+                              >
+                                <svg
+                                  width='12'
+                                  height='12'
+                                  fill='none'
+                                  stroke='currentColor'
+                                  strokeWidth='2'
+                                  viewBox='0 0 24 24'
+                                >
+                                  <polyline points='20 6 9 17 4 12' />
+                                </svg>
+                                Aktivasi
+                              </button>
+                              <button
+                                onClick={() =>
+                                  rejectUser(user.id_user, user.name)
+                                }
+                                className='flex items-center gap-1.5 rounded-md bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors'
+                              >
+                                <svg
+                                  width='12'
+                                  height='12'
+                                  fill='none'
+                                  stroke='currentColor'
+                                  strokeWidth='2'
+                                  viewBox='0 0 24 24'
+                                >
+                                  <line x1='18' y1='6' x2='6' y2='18' />
+                                  <line x1='6' y1='6' x2='18' y2='18' />
+                                </svg>
+                                Tolak
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Modal Tambah/Edit */}
       {modalOpen && (
         <div className='fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-animate'>
           <div className='absolute inset-0 bg-black/40' onClick={closeModal} />

@@ -7,6 +7,7 @@ router.post("/login", authController.login);
 router.get("/users", verifyToken, isAdmin, (req, res) => {
   res.json({ message: "Hanya admin bisa akses ini" });
 });
+router.post('/register', authController.register)
 
 
 module.exports = router

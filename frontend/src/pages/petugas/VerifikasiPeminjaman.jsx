@@ -1,4 +1,3 @@
-// VerifikasiPeminjaman.jsx - dengan fitur Export Excel
 import React, { useEffect, useMemo, useState, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import api from '../../lib/api'
@@ -40,7 +39,6 @@ function StatusBadge ({ status }) {
   )
 }
 
-// Tombol Export Excel
 function ExportButton ({ onClick, disabled }) {
   return (
     <button
@@ -85,6 +83,7 @@ export default function VerifikasiPeminjaman () {
   const [submitting, setSubmitting] = useState(false)
   const limit = 10
   const socketRef = useRef(null)
+  const [alasanTolak, setAlasanTolak] = useState('')
 
   const showToast = (message, type = 'success') =>
     setToast({ show: true, message, type })
@@ -128,15 +127,25 @@ export default function VerifikasiPeminjaman () {
       showToast('Data konfirmasi tidak valid', 'error')
       return
     }
+    if (confirmData.status === 'ditolak' && !alasanTolak.trim()) {
+      showToast('Alasan penolakan wajib diisi', 'error')
+      return
+    }
+
     setSubmitting(true)
     try {
       await api.patch(`/peminjaman/${confirmData.id}/status`, {
-        status: confirmData.status.toLowerCase().trim()
+        status: confirmData.status.toLowerCase().trim(),
+        keterangan_batal:
+          confirmData.status === 'ditolak' ? alasanTolak.trim() : undefined
       })
-      const statusText =
-        confirmData.status === 'disetujui' ? 'disetujui' : 'ditolak'
-      showToast(`Peminjaman berhasil ${statusText}`, 'success')
-      setConfirmData(null)
+      showToast(
+        `Peminjaman berhasil ${
+          confirmData.status === 'disetujui' ? 'disetujui' : 'ditolak'
+        }`,
+        'success'
+      )
+      closeConfirmModal()
       fetchData()
     } catch (err) {
       showToast(
@@ -148,14 +157,20 @@ export default function VerifikasiPeminjaman () {
     }
   }
 
+  const closeConfirmModal = () => {
+    setConfirmData(null)
+    setAlasanTolak('')
+  }
+
   const updateTanggal = async () => {
     if (!editingDate?.tgl_pinjam || !editingDate?.tgl_rencana_kembali) {
       showToast('Tanggal harus diisi', 'error')
       return
     }
-    const tglPinjam = new Date(editingDate.tgl_pinjam)
-    const tglKembali = new Date(editingDate.tgl_rencana_kembali)
-    if (tglKembali < tglPinjam) {
+    if (
+      new Date(editingDate.tgl_rencana_kembali) <
+      new Date(editingDate.tgl_pinjam)
+    ) {
       showToast('Tanggal kembali tidak boleh sebelum tanggal pinjam', 'error')
       return
     }
@@ -178,7 +193,6 @@ export default function VerifikasiPeminjaman () {
     }
   }
 
-  // ── Export Excel ────────────────────────────────────────────────────────────
   const exportExcel = () => {
     const exportData = filteredData.map((p, i) => ({
       No: i + 1,
@@ -192,26 +206,23 @@ export default function VerifikasiPeminjaman () {
         : '-',
       Deskripsi: p.deskripsi || '-'
     }))
-
     const ws = XLSX.utils.json_to_sheet(exportData)
-
-    // Atur lebar kolom
     ws['!cols'] = [
-      { wch: 5 }, // No
-      { wch: 22 }, // Peminjam
-      { wch: 25 }, // Alat
-      { wch: 22 }, // Tgl Pinjam
-      { wch: 20 }, // Rencana Kembali
-      { wch: 14 }, // Durasi
-      { wch: 14 }, // Status
-      { wch: 30 } // Deskripsi
+      { wch: 5 },
+      { wch: 22 },
+      { wch: 25 },
+      { wch: 22 },
+      { wch: 20 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 30 }
     ]
-
     const wb = XLSX.utils.book_new()
-    const sheetName =
+    XLSX.utils.book_append_sheet(
+      wb,
+      ws,
       tab === 'verifikasi' ? 'Perlu Verifikasi' : 'Histori Peminjaman'
-    XLSX.utils.book_append_sheet(wb, ws, sheetName)
-
+    )
     const tanggal = new Date()
       .toLocaleDateString('id-ID', {
         day: '2-digit',
@@ -222,7 +233,6 @@ export default function VerifikasiPeminjaman () {
     XLSX.writeFile(wb, `peminjaman_${tab}_${tanggal}.xlsx`)
     showToast(`Berhasil export ${exportData.length} data ke Excel`, 'success')
   }
-  // ───────────────────────────────────────────────────────────────────────────
 
   const filteredData = useMemo(() => {
     const byTab =
@@ -365,7 +375,6 @@ export default function VerifikasiPeminjaman () {
           </div>
 
           <div className='flex items-center gap-2'>
-            {/* Search */}
             <div className='relative'>
               <svg
                 className='absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400'
@@ -384,7 +393,6 @@ export default function VerifikasiPeminjaman () {
                 className='w-full sm:w-48 rounded-md border border-gray-200 bg-white py-1.5 pl-8 pr-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-100'
               />
             </div>
-            {/* Export Button */}
             <ExportButton
               onClick={exportExcel}
               disabled={filteredData.length === 0 || loading}
@@ -414,7 +422,7 @@ export default function VerifikasiPeminjaman () {
                   <th
                     key={h}
                     className={`px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 ${
-                      h === 'Aksi' ? 'text-center w-32' : 'text-left'
+                      h === 'Aksi' ? 'text-center' : 'text-left'
                     }`}
                   >
                     {h}
@@ -488,8 +496,8 @@ export default function VerifikasiPeminjaman () {
                         <StatusBadge status={p.status} />
                       </td>
                       <td className='px-4 py-2.5 text-center'>
-                        {p.status === 'menunggu' ? (
-                          <div className='flex items-center justify-center gap-2'>
+                        {tab === 'verifikasi' && p.status === 'menunggu' ? (
+                          <div className='flex items-center justify-center gap-1.5 flex-wrap'>
                             <button
                               onClick={() =>
                                 setConfirmData({
@@ -497,7 +505,7 @@ export default function VerifikasiPeminjaman () {
                                   status: 'disetujui'
                                 })
                               }
-                              className='px-3 py-1 rounded-md bg-green-50 text-green-600 text-xs font-medium hover:bg-green-100 transition-colors'
+                              className='px-2.5 py-1 rounded-md bg-green-50 text-green-600 text-xs font-medium hover:bg-green-100 transition-colors'
                             >
                               Setujui
                             </button>
@@ -508,30 +516,81 @@ export default function VerifikasiPeminjaman () {
                                   status: 'ditolak'
                                 })
                               }
-                              className='px-3 py-1 rounded-md bg-red-50 text-red-500 text-xs font-medium hover:bg-red-100 transition-colors'
+                              className='px-2.5 py-1 rounded-md bg-red-50 text-red-500 text-xs font-medium hover:bg-red-100 transition-colors'
                             >
                               Tolak
                             </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => setEditingDate(p)}
+                                className='inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors'
+                              >
+                                <svg
+                                  width='11'
+                                  height='11'
+                                  fill='none'
+                                  stroke='currentColor'
+                                  strokeWidth='2'
+                                  viewBox='0 0 24 24'
+                                >
+                                  <rect
+                                    x='3'
+                                    y='4'
+                                    width='18'
+                                    height='18'
+                                    rx='2'
+                                    ry='2'
+                                  />
+                                  <line x1='16' y1='2' x2='16' y2='6' />
+                                  <line x1='8' y1='2' x2='8' y2='6' />
+                                  <line x1='3' y1='10' x2='21' y2='10' />
+                                </svg>
+                                Ubah Tgl
+                              </button>
+                            )}
                           </div>
                         ) : (
-                          p.status !== 'dipinjam' &&
-                          p.status !== 'batal' && (
-                            <button
-                              onClick={() => setEditingDate(p)}
-                              className='inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors'
-                            >
-                              ✏️ Ubah Tanggal
-                            </button>
-                          )
+                          <span className='text-gray-300 text-xs'>—</span>
                         )}
                       </td>
                     </tr>
+
                     {p.deskripsi && Number(p.durasi_hari) > 7 && (
                       <tr className='bg-amber-50/30'>
                         <td colSpan='6' className='px-4 pb-2 pt-0'>
                           <div className='text-xs text-amber-700'>
                             <span className='font-medium'>📝 Alasan:</span>{' '}
                             {p.deskripsi}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+
+                    {p.status === 'ditolak' && p.keterangan_batal && (
+                      <tr className='bg-red-50/40'>
+                        <td colSpan='6' className='px-4 pb-3 pt-1'>
+                          <div className='flex items-start gap-2'>
+                            <svg
+                              width='12'
+                              height='12'
+                              fill='none'
+                              stroke='#ef4444'
+                              strokeWidth='2'
+                              viewBox='0 0 24 24'
+                              className='mt-0.5 shrink-0'
+                            >
+                              <circle cx='12' cy='12' r='10' />
+                              <line x1='12' y1='8' x2='12' y2='12' />
+                              <line x1='12' y1='16' x2='12.01' y2='16' />
+                            </svg>
+                            <div>
+                              <span className='text-[10px] font-semibold text-red-600'>
+                                Alasan Penolakan:
+                              </span>
+                              <span className='ml-1 text-[10px] text-red-500'>
+                                {p.keterangan_batal}
+                              </span>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -568,8 +627,35 @@ export default function VerifikasiPeminjaman () {
                   <span className='font-medium'>⚠️ Alasan:</span> {p.deskripsi}
                 </div>
               )}
-              {p.status === 'menunggu' && (
-                <div className='flex gap-2'>
+              {p.status === 'ditolak' && p.keterangan_batal && (
+                <div className='mb-3 rounded-md bg-red-50 border border-red-100 px-2.5 py-2'>
+                  <div className='flex items-start gap-1.5'>
+                    <svg
+                      width='11'
+                      height='11'
+                      fill='none'
+                      stroke='#ef4444'
+                      strokeWidth='2'
+                      viewBox='0 0 24 24'
+                      className='mt-0.5 shrink-0'
+                    >
+                      <circle cx='12' cy='12' r='10' />
+                      <line x1='12' y1='8' x2='12' y2='12' />
+                      <line x1='12' y1='16' x2='12.01' y2='16' />
+                    </svg>
+                    <div>
+                      <p className='text-[10px] font-semibold text-red-600 mb-0.5'>
+                        Alasan Penolakan
+                      </p>
+                      <p className='text-[10px] text-red-500'>
+                        {p.keterangan_batal}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {tab === 'verifikasi' && p.status === 'menunggu' && (
+                <div className='flex gap-2 flex-wrap'>
                   <button
                     onClick={() =>
                       setConfirmData({
@@ -589,6 +675,14 @@ export default function VerifikasiPeminjaman () {
                   >
                     Tolak
                   </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => setEditingDate(p)}
+                      className='flex-1 rounded-md bg-blue-50 py-1.5 text-xs font-medium text-blue-600'
+                    >
+                      Ubah Tgl
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -626,72 +720,102 @@ export default function VerifikasiPeminjaman () {
         )}
       </div>
 
-      {/* Modal Konfirmasi */}
+      {/* Modal Konfirmasi Setujui/Tolak */}
       {confirmData && (
         <div className='fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-animate'>
           <div
             className='absolute inset-0 bg-black/40'
-            onClick={() => setConfirmData(null)}
+            onClick={closeConfirmModal}
           />
           <div className='relative w-full max-w-sm rounded-xl bg-white shadow-xl modal-animate'>
-            <div className='p-5 text-center'>
-              <div
-                className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full ${
-                  confirmData.status === 'disetujui'
-                    ? 'bg-green-50'
-                    : 'bg-red-50'
-                }`}
-              >
-                {confirmData.status === 'disetujui' ? (
-                  <svg
-                    width='22'
-                    height='22'
-                    fill='none'
-                    stroke='#16a34a'
-                    strokeWidth='2'
-                    viewBox='0 0 24 24'
-                  >
-                    <polyline points='20,6 9,17 4,12' />
-                  </svg>
-                ) : (
-                  <svg
-                    width='22'
-                    height='22'
-                    fill='none'
-                    stroke='#ef4444'
-                    strokeWidth='2'
-                    viewBox='0 0 24 24'
-                  >
-                    <line x1='18' y1='6' x2='6' y2='18' />
-                    <line x1='6' y1='6' x2='18' y2='18' />
-                  </svg>
-                )}
+            <div className='p-5'>
+              {/* Icon */}
+              <div className='flex justify-center mb-3'>
+                <div
+                  className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                    confirmData.status === 'disetujui'
+                      ? 'bg-green-50'
+                      : 'bg-red-50'
+                  }`}
+                >
+                  {confirmData.status === 'disetujui' ? (
+                    <svg
+                      width='22'
+                      height='22'
+                      fill='none'
+                      stroke='#16a34a'
+                      strokeWidth='2'
+                      viewBox='0 0 24 24'
+                    >
+                      <polyline points='20,6 9,17 4,12' />
+                    </svg>
+                  ) : (
+                    <svg
+                      width='22'
+                      height='22'
+                      fill='none'
+                      stroke='#ef4444'
+                      strokeWidth='2'
+                      viewBox='0 0 24 24'
+                    >
+                      <line x1='18' y1='6' x2='6' y2='18' />
+                      <line x1='6' y1='6' x2='18' y2='18' />
+                    </svg>
+                  )}
+                </div>
               </div>
-              <h3 className='text-base font-semibold text-gray-900 mb-1'>
+
+              {/* Title */}
+              <h3 className='text-center text-base font-semibold text-gray-900 mb-1'>
                 {confirmData.status === 'disetujui'
                   ? 'Setujui Peminjaman?'
                   : 'Tolak Peminjaman?'}
               </h3>
-              <p className='text-xs text-gray-500 mb-5'>
+              <p className='text-center text-xs text-gray-500 mb-4'>
                 {confirmData.status === 'disetujui'
                   ? 'Peminjam akan mendapat notifikasi persetujuan.'
-                  : 'Peminjaman akan ditolak dan stok alat tidak akan berkurang.'}
+                  : 'Berikan alasan penolakan agar peminjam mengetahui penyebabnya.'}
               </p>
+
+              {confirmData.status === 'ditolak' && (
+                <div className='mb-4'>
+                  <label className='block text-xs font-medium text-gray-600 mb-1'>
+                    Alasan Penolakan <span className='text-red-400'>*</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={alasanTolak}
+                    onChange={e => setAlasanTolak(e.target.value)}
+                    placeholder=''
+                    className='w-full rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-red-300 focus:outline-none focus:ring-1 focus:ring-red-100 resize-none'
+                  />
+                  {!alasanTolak.trim() && (
+                    <p className='text-[10px] text-red-400 mt-1'>
+                      Alasan wajib diisi sebelum menolak
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Buttons */}
               <div className='flex gap-2'>
                 <button
-                  onClick={() => setConfirmData(null)}
+                  onClick={closeConfirmModal}
                   className='flex-1 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50'
                 >
                   Batal
                 </button>
                 <button
                   onClick={updateStatus}
-                  disabled={submitting}
-                  className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold text-white ${
+                  disabled={
+                    submitting ||
+                    (confirmData.status === 'ditolak' && !alasanTolak.trim())
+                  }
+                  className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold text-white transition-colors ${
                     confirmData.status === 'disetujui'
                       ? 'bg-green-600 hover:bg-green-700'
                       : 'bg-red-500 hover:bg-red-600'
-                  } disabled:opacity-60`}
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   {submitting
                     ? 'Memproses...'
@@ -705,7 +829,7 @@ export default function VerifikasiPeminjaman () {
         </div>
       )}
 
-      {/* Modal Edit Tanggal */}
+      {/* Modal Ubah Tanggal */}
       {editingDate && (
         <div className='fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-animate'>
           <div
@@ -718,9 +842,25 @@ export default function VerifikasiPeminjaman () {
                 Ubah Tanggal Peminjaman
               </h3>
               <p className='text-xs text-gray-400 mt-0.5'>
-                Sesuaikan tanggal pinjam dan rencana kembali
+                Sesuaikan tanggal sebelum menyetujui peminjaman
               </p>
             </div>
+
+            {/* Info peminjam */}
+            <div className='mx-5 mt-4 rounded-lg bg-gray-50 border border-gray-100 px-3.5 py-2.5'>
+              <p className='text-xs text-gray-500'>
+                Peminjam:{' '}
+                <span className='font-medium text-gray-800'>
+                  {editingDate.peminjam}
+                </span>
+                <span className='mx-1.5 text-gray-300'>·</span>
+                Alat:{' '}
+                <span className='font-medium text-gray-800'>
+                  {editingDate.alat}
+                </span>
+              </p>
+            </div>
+
             <div className='p-5 space-y-4'>
               <div>
                 <label className='mb-1 block text-xs font-medium text-gray-600'>
@@ -761,6 +901,7 @@ export default function VerifikasiPeminjaman () {
                 </p>
               </div>
             </div>
+
             <div className='flex gap-2 border-t border-gray-100 px-5 py-4'>
               <button
                 onClick={() => setEditingDate(null)}
@@ -773,7 +914,7 @@ export default function VerifikasiPeminjaman () {
                 disabled={submitting}
                 className='flex-1 rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60'
               >
-                {submitting ? 'Menyimpan...' : 'Simpan Perubahan'}
+                {submitting ? 'Menyimpan...' : 'Simpan Tanggal'}
               </button>
             </div>
           </div>

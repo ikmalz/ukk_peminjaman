@@ -27,6 +27,10 @@ import KonfigurasiDenda from './pages/petugas/KonfigurasiDenda'
 import NotFound from './components/NotFound'
 import HistoryPeminjam from './pages/peminjam/HistoryPeminjam'
 
+import KasirDenda from './pages/petugas/KasirDenda'
+import TagihanDenda from './pages/peminjam/TagihanDenda'
+import StrukDenda from './pages/peminjam/StrukDenda'
+
 export default function App () {
   return (
     <AuthProvider>
@@ -34,7 +38,6 @@ export default function App () {
         <Routes>
           <Route path='/' element={<Navigate to='/login' />} />
           <Route path='/login' element={<Login />} />
-          
 
           {/* ADMIN */}
           <Route
@@ -55,6 +58,8 @@ export default function App () {
             <Route path='pengembalian' element={<VerifikasiPengembalian />} />
             <Route path='verifikasi' element={<VerifikasiPeminjaman />} />
             <Route path='denda' element={<DendaPetugas />} />
+            <Route path='kasir-denda' element={<KasirDenda />} />
+            <Route path='struk-denda/:id' element={<StrukDenda />} />
             <Route path='scan' element={<ScanQR />} />
           </Route>
 
@@ -71,9 +76,10 @@ export default function App () {
             <Route path='verifikasi' element={<VerifikasiPeminjaman />} />
             <Route path='pengembalian' element={<VerifikasiPengembalian />} />
             <Route path='denda' element={<DendaPetugas />} />
+            <Route path='kasir-denda' element={<KasirDenda />} />
+            <Route path='struk-denda/:id' element={<StrukDenda />} />
             <Route path='konfigurasi-denda' element={<KonfigurasiDenda />} />
             <Route path='scan' element={<ScanQR />} />
-
             <Route path='kategori' element={<Kategori />} />
             <Route path='alat' element={<Alat />} />
             <Route path='alat/:id/unit' element={<AlatUnit />} />
@@ -93,14 +99,17 @@ export default function App () {
             <Route
               path='/peminjam/pinjam/:id'
               element={<AjukanPeminjaman />}
-            />{' '}
+            />
             <Route path='kembali' element={<PengembalianPeminjam />} />
             <Route path='detail/:id' element={<DetailAlat />} />
             <Route path='pinjam' element={<AjukanPeminjaman />} />
             <Route path='struk/:id' element={<StrukPeminjaman />} />
             <Route path='history' element={<HistoryPeminjam />} />
+            <Route path='tagihan-denda' element={<TagihanDenda />} />
+            <Route path='struk-denda/:id' element={<StrukDenda />} />
           </Route>
-           <Route path='*' element={<NotFound />} />
+
+          <Route path='*' element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

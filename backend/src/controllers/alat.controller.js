@@ -1,6 +1,31 @@
 const db = require ('../config/db');
 const logAktivitas = require ('../utils/logAktivitas');
 
+const generateUniqueKodeUnit = async (client, baseKode, startNumber = 1) => {
+  let kode_unit;
+  let isUnique = false;
+  let counter = startNumber;
+  
+  while (!isUnique) {
+    kode_unit = `${baseKode}-${String(counter).padStart(3, '0')}`;
+    const existing = await client.query(
+      'SELECT id_unit FROM alat_unit WHERE kode_unit = $1',
+      [kode_unit]
+    );
+    
+    if (existing.rows.length === 0) {
+      isUnique = true;
+    } else {
+      counter++;
+      if (counter > 9999) {
+        throw new Error('Tidak dapat menemukan kode unit yang unik');
+      }
+    }
+  }
+  
+  return { kode_unit, counter };
+};
+
 exports.createAlat = async (req, res) => {
   let {
     id_kategori,
@@ -19,7 +44,9 @@ exports.createAlat = async (req, res) => {
   harga = parseInt(harga) || 0;
 
   if (!id_kategori || !name || stok <= 0) {
-    return res.status(400).json({ message: 'Kategori, nama alat, dan stok wajib diisi dengan benar (stok > 0)' });
+    return res.status(400).json({ 
+      message: 'Kategori, nama alat, dan stok wajib diisi dengan benar (stok > 0)' 
+    });
   }
 
   if (harga < 0) {
@@ -34,12 +61,6 @@ exports.createAlat = async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const kodeRes = await client.query(
-      'SELECT COUNT(*) AS total FROM alat WHERE id_kategori = $1',
-      [id_kategori]
-    );
-
-    const urutan = Number(kodeRes.rows[0].total) + 1;
     const kategoriRes = await client.query(
       'SELECT name FROM kategori_alat WHERE id_kategori = $1',
       [id_kategori]
@@ -50,18 +71,35 @@ exports.createAlat = async (req, res) => {
       return res.status(400).json({ message: 'Kategori tidak ditemukan' });
     }
 
+    const lastAlatRes = await client.query(
+      `SELECT kode_alat 
+       FROM alat 
+       WHERE id_kategori = $1 
+       ORDER BY id_alat DESC 
+       LIMIT 1`,
+      [id_kategori]
+    );
+
+    let urutan = 1;
     const prefix = kategoriRes.rows[0].name.substring(0, 3).toUpperCase();
-    const kode_alat = prefix + '-' + String(urutan).padStart(3, '0');
+    
+    if (lastAlatRes.rows.length > 0) {
+      const lastKode = lastAlatRes.rows[0].kode_alat;
+      const lastNumber = parseInt(lastKode.split('-')[1]);
+      if (!isNaN(lastNumber)) {
+        urutan = lastNumber + 1;
+      }
+    }
+
+    const kode_alat = `${prefix}-${String(urutan).padStart(3, '0')}`;
     const image = req.file ? `/uploads/alat/${req.file.filename}` : null;
 
     const result = await client.query(
-      `
-      INSERT INTO alat 
-      (kode_alat, id_kategori, name, stok, stok_minimum, merk, tipe_model, spesifikasi, 
-       kondisi, status_aktif, image, harga)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'normal', 1, $9, $10)
-      RETURNING id_alat
-      `,
+      `INSERT INTO alat 
+       (kode_alat, id_kategori, name, stok, stok_minimum, merk, tipe_model, spesifikasi, 
+        kondisi, status_aktif, image, harga)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'normal', 1, $9, $10)
+       RETURNING id_alat`,
       [kode_alat, id_kategori, name, stok, stok_minimum, merk || null, tipe_model || null, spesifikasi || null, image, harga]
     );
 
@@ -69,10 +107,26 @@ exports.createAlat = async (req, res) => {
 
     for (let i = 1; i <= stok; i++) {
       const kode_unit = `${kode_alat}-${String(i).padStart(3, '0')}`;
-      await client.query(
-        `INSERT INTO alat_unit (id_alat, kode_unit, status) VALUES ($1, $2, 'tersedia')`,
-        [id_alat, kode_unit]
+      
+      const unitExists = await client.query(
+        'SELECT id_unit FROM alat_unit WHERE kode_unit = $1',
+        [kode_unit]
       );
+      
+      if (unitExists.rows.length > 0) {
+        const newNumber = i + 1000;
+        const newKodeUnit = `${kode_alat}-${String(newNumber).padStart(3, '0')}`;
+        await client.query(
+          `INSERT INTO alat_unit (id_alat, kode_unit, status) VALUES ($1, $2, 'tersedia')`,
+          [id_alat, newKodeUnit]
+        );
+        console.log(`Unit ${kode_unit} sudah ada, menggunakan ${newKodeUnit} sebagai gantinya`);
+      } else {
+        await client.query(
+          `INSERT INTO alat_unit (id_alat, kode_unit, status) VALUES ($1, $2, 'tersedia')`,
+          [id_alat, kode_unit]
+        );
+      }
     }
 
     await client.query('COMMIT');
@@ -82,16 +136,23 @@ exports.createAlat = async (req, res) => {
       aktivitas: `Menambahkan alat baru: ${name} (${kode_alat}) dengan ${stok} unit`,
     });
 
-    res.json({
+    res.status(201).json({
+      success: true,
       message: 'Alat berhasil ditambahkan',
-      id_alat,
-      stok,
+      data: {
+        id_alat,
+        kode_alat,
+        stok,
+      },
     });
 
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Error createAlat:', err);
-    res.status(500).json({ message: 'Gagal menambahkan alat' });
+    console.error('Error createAlat detail:', err);
+    res.status(500).json({ 
+      message: 'Gagal menambahkan alat',
+      error: err.message 
+    });
   } finally {
     client.release();
   }
@@ -158,7 +219,7 @@ exports.updateAlat = async (req, res) => {
     kode_alat,
     id_kategori,
     name,
-    stok,
+    stok: stokBaru,
     stok_minimum,
     merk,
     tipe_model,
@@ -169,57 +230,145 @@ exports.updateAlat = async (req, res) => {
   } = req.body;
 
   id_kategori = id_kategori ? parseInt(id_kategori) : null;
-  stok = stok ? parseInt(stok) : null;
+  stokBaru = stokBaru ? parseInt(stokBaru) : null;
   stok_minimum = stok_minimum ? parseInt(stok_minimum) : 0;
   harga = harga ? parseInt(harga) : 0;
   status_aktif = status_aktif !== undefined ? parseInt(status_aktif) : 1;
 
+  const client = await db.connect();
+
   try {
+    await client.query('BEGIN');
+
+    const alatRes = await client.query(
+      'SELECT stok, kode_alat FROM alat WHERE id_alat = $1',
+      [id]
+    );
+
+    if (alatRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Alat tidak ditemukan' });
+    }
+
+    const stokLama = alatRes.rows[0].stok;
+    const kodeAlatLama = kode_alat || alatRes.rows[0].kode_alat;
+    const selisih = stokBaru - stokLama;
+
+    if (selisih < 0) {
+      const jumlahHapus = Math.abs(selisih);
+
+      const tersediaRes = await client.query(
+        `SELECT id_unit FROM alat_unit 
+         WHERE id_alat = $1 AND status = 'tersedia' 
+         ORDER BY kode_unit DESC`,
+        [id]
+      );
+
+      if (tersediaRes.rows.length < jumlahHapus) {
+        await client.query('ROLLBACK');
+        const unitAktif = await client.query(
+          `SELECT COUNT(*) FROM alat_unit 
+           WHERE id_alat = $1 AND status != 'tersedia'`,
+          [id]
+        );
+        return res.status(400).json({
+          message: `Tidak dapat mengurangi stok. Hanya ada ${tersediaRes.rows.length} unit tersedia, ` +
+            `sementara ${unitAktif.rows[0].count} unit sedang aktif (dipinjam/rusak/hilang/maintenance).`
+        });
+      }
+
+      const unitIdsHapus = tersediaRes.rows.slice(0, jumlahHapus).map(r => r.id_unit);
+      await client.query(
+        `DELETE FROM alat_unit WHERE id_unit = ANY($1)`,
+        [unitIdsHapus]
+      );
+
+    } else if (selisih > 0) {
+      const lastUnitRes = await client.query(
+        `SELECT kode_unit FROM alat_unit 
+         WHERE id_alat = $1 
+         ORDER BY kode_unit DESC 
+         LIMIT 1`,
+        [id]
+      );
+
+      let startCounter = stokLama + 1;
+      if (lastUnitRes.rows.length > 0) {
+        const lastKode = lastUnitRes.rows[0].kode_unit;
+        const lastNum = parseInt(lastKode.split('-').pop());
+        if (!isNaN(lastNum)) startCounter = lastNum + 1;
+      }
+
+      for (let i = 0; i < selisih; i++) {
+        const { kode_unit, counter } = await generateUniqueKodeUnit(
+          client,
+          kodeAlatLama,
+          startCounter + i
+        );
+        await client.query(
+          `INSERT INTO alat_unit (id_alat, kode_unit, status) VALUES ($1, $2, 'tersedia')`,
+          [id, kode_unit]
+        );
+      }
+    }
+
     const image = req.file ? `/uploads/alat/${req.file.filename}` : null;
 
-    const query = `
-      UPDATE alat
-      SET 
-        kode_alat = $1,
-        id_kategori = $2,
-        name = $3,
-        stok = $4,
-        stok_minimum = $5,
-        merk = $6,
-        tipe_model = $7,
-        spesifikasi = $8,
-        kondisi = $9,
-        status_aktif = $10,
-        harga = $11,
-        image = COALESCE($12, image)
-      WHERE id_alat = $13
-    `;
+    await client.query(
+      `UPDATE alat
+       SET 
+         kode_alat = $1,
+         id_kategori = $2,
+         name = $3,
+         stok = $4,
+         stok_minimum = $5,
+         merk = $6,
+         tipe_model = $7,
+         spesifikasi = $8,
+         kondisi = $9,
+         status_aktif = $10,
+         harga = $11,
+         image = COALESCE($12, image)
+       WHERE id_alat = $13`,
+      [
+        kode_alat || null,
+        id_kategori,
+        name,
+        stokBaru,
+        stok_minimum,
+        merk || null,
+        tipe_model || null,
+        spesifikasi || null,
+        kondisi || 'normal',
+        status_aktif,
+        harga,
+        image,
+        id,
+      ]
+    );
 
-    await db.query(query, [
-      kode_alat || null,
-      id_kategori,
-      name,
-      stok,
-      stok_minimum,
-      merk || null,
-      tipe_model || null,
-      spesifikasi || null,
-      kondisi || 'normal',
-      status_aktif,
-      harga,
-      image,
-      id,
-    ]);
+    await client.query('COMMIT');
 
     await logAktivitas({
       id_user: req.user?.id_user,
-      aktivitas: `Mengupdate alat ID ${id}`,
+      aktivitas: `Mengupdate alat ID ${id}${selisih !== 0 ? ` (stok: ${stokLama} → ${stokBaru})` : ''}`,
     });
 
-    res.json({ message: 'Data alat berhasil diperbarui' });
+    res.json({ 
+      message: 'Data alat berhasil diperbarui',
+      info: selisih > 0 
+        ? `${selisih} unit baru ditambahkan` 
+        : selisih < 0 
+        ? `${Math.abs(selisih)} unit tersedia dihapus`
+        : 'Tidak ada perubahan stok'
+    });
+
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('Error updateAlat:', err);
     res.status(500).json({ message: 'Gagal mengubah data alat' });
+  } finally {
+    client.release();
   }
 };
 

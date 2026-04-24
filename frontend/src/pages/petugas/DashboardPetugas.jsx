@@ -1,4 +1,3 @@
-// DashboardPetugas.jsx - Versi dengan 3 item dan tanpa peminjaman hari ini
 import { useEffect, useState } from 'react'
 import api from '../../lib/api'
 import { Link } from 'react-router-dom'
@@ -24,7 +23,6 @@ export default function DashboardPetugas() {
         const peminjaman = peminjamanRes.data.data
         const pengembalian = pengembalianRes.data.data
         
-        // Summary stats
         setSummary({
           peminjaman: peminjaman.length,
           pengembalian: pengembalian.length,
@@ -32,11 +30,9 @@ export default function DashboardPetugas() {
           menungguPengembalian: pengembalian.filter(p => p.status_verifikasi === 'menunggu').length
         })
 
-        // Recent loans (3 terbaru)
         const sortedLoans = [...peminjaman].sort((a, b) => new Date(b.tgl_pinjam) - new Date(a.tgl_pinjam))
         setRecentLoans(sortedLoans.slice(0, 3))
 
-        // Top borrowers (user yang sering meminjam) - 3 teratas
         const borrowerCount = peminjaman.reduce((acc, curr) => {
           acc[curr.peminjam] = (acc[curr.peminjam] || 0) + 1
           return acc
@@ -76,7 +72,6 @@ export default function DashboardPetugas() {
         </p>
       </div>
 
-      {/* Stats Grid */}
       <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4'>
         <StatCard
           loading={loading}
@@ -136,7 +131,6 @@ export default function DashboardPetugas() {
 
       {/* Additional Info Grid - 2 kolom */}
       <div className='grid grid-cols-1 lg:grid-cols-2 gap-4'>
-        {/* Peminjaman Terbaru */}
         <div className='bg-white rounded-lg border border-gray-100 p-4 shadow-sm'>
           <div className='flex items-center gap-2 mb-3'>
             <div className='p-1.5 rounded-lg bg-purple-50 text-purple-500'>
@@ -238,7 +232,6 @@ export default function DashboardPetugas() {
   )
 }
 
-// StatCard Component
 function StatCard({ label, value, sub, icon, loading, urgent, link }) {
   const icons = {
     loan: (
@@ -299,7 +292,6 @@ function StatCard({ label, value, sub, icon, loading, urgent, link }) {
   return cardContent
 }
 
-// QuickActionCard Component
 function QuickActionCard({ title, description, icon, link, count, loading, color }) {
   const colors = {
     blue: 'border-blue-100 bg-blue-50/30 hover:bg-blue-50',
@@ -343,7 +335,6 @@ function QuickActionCard({ title, description, icon, link, count, loading, color
   )
 }
 
-// InfoCard Component
 function InfoCard({ title, items, variant = 'default' }) {
   return (
     <div className='bg-white rounded-lg border border-gray-100 p-4 shadow-sm'>

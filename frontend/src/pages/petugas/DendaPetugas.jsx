@@ -1,8 +1,22 @@
-// DendaPetugas.jsx - Versi Modern Minimalis
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../lib/api'
 
 const fmt = n => 'Rp ' + Number(n).toLocaleString('id-ID')
+
+const KONDISI_BADGE = {
+  rusak_ringan: 'bg-yellow-50 text-yellow-700 border-yellow-100',
+  rusak_berat: 'bg-orange-50 text-orange-700 border-orange-100',
+  hilang: 'bg-red-50 text-red-700 border-red-100'
+}
+
+const getKondisiLabel = v =>
+  v === 'rusak_ringan'
+    ? 'Rusak Ringan'
+    : v === 'rusak_berat'
+    ? 'Rusak Berat'
+    : v === 'hilang'
+    ? 'Hilang'
+    : v ?? '-'
 
 export default function DendaPetugas () {
   const [data, setData] = useState([])
@@ -11,7 +25,8 @@ export default function DendaPetugas () {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [confirmId, setConfirmId] = useState(null)
-  const limit = 8
+  const [expandedId, setExpandedId] = useState(null)
+  const LIMIT = 8
 
   const fetchDenda = async () => {
     setLoading(true)
@@ -50,29 +65,23 @@ export default function DendaPetugas () {
     )
   }, [data, tab, search])
 
-  const totalPage = Math.ceil(filteredData.length / limit)
-  const paginatedData = filteredData.slice((page - 1) * limit, page * limit)
+  const totalPage = Math.ceil(filteredData.length / LIMIT)
+  const paginatedData = filteredData.slice((page - 1) * LIMIT, page * LIMIT)
 
   useEffect(() => {
     setPage(1)
   }, [tab, search])
 
   const belumCount = data.filter(d => d.status_bayar === 'belum_bayar').length
-  const totalDendaBelum = data
+  const totalNominalBelum = data
     .filter(d => d.status_bayar === 'belum_bayar')
     .reduce((sum, d) => sum + (d.total_denda || 0), 0)
 
   return (
     <div>
       <style>{`
-        @keyframes modalFadeIn {
-          from { opacity: 0; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        @keyframes backdropFade {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
+        @keyframes modalFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes backdropFade { from { opacity: 0; } to { opacity: 1; } }
         .modal-animate { animation: modalFadeIn 0.2s ease-out; }
         .backdrop-animate { animation: backdropFade 0.15s ease-out; }
       `}</style>
@@ -83,11 +92,11 @@ export default function DendaPetugas () {
           Kelola Denda
         </h1>
         <p className='text-sm text-gray-400 mt-0.5'>
-          Kelola pembayaran denda keterlambatan pengembalian alat
+          Kelola pembayaran denda keterlambatan & kerusakan alat
         </p>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats */}
       <div className='mb-5 grid grid-cols-2 md:grid-cols-4 gap-3'>
         <div className='rounded-lg border border-gray-100 bg-white p-3 shadow-sm'>
           <p className='text-[10px] font-medium text-gray-400 uppercase tracking-wider'>
@@ -114,7 +123,7 @@ export default function DendaPetugas () {
             Total Nominal
           </p>
           <p className='text-lg font-bold text-amber-600 mt-1 truncate'>
-            {fmt(totalDendaBelum)}
+            {fmt(totalNominalBelum)}
           </p>
         </div>
       </div>
@@ -124,31 +133,24 @@ export default function DendaPetugas () {
         {/* Tabs & Search */}
         <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-gray-100 px-4 py-2.5'>
           <div className='flex gap-1'>
-            <button
-              onClick={() => setTab('belum')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
-                tab === 'belum'
-                  ? 'bg-gray-900 text-white shadow-sm'
-                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-              }`}
-            >
-              Belum Lunas
-              {belumCount > 0 && (
-                <span className='ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-400 text-[9px] font-bold text-white'>
-                  {belumCount}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setTab('histori')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
-                tab === 'histori'
-                  ? 'bg-gray-900 text-white shadow-sm'
-                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-              }`}
-            >
-              Histori Lunas
-            </button>
+            {['belum', 'histori'].map(t => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
+                  tab === t
+                    ? 'bg-gray-900 text-white shadow-sm'
+                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                }`}
+              >
+                {t === 'belum' ? 'Belum Lunas' : 'Histori Lunas'}
+                {t === 'belum' && belumCount > 0 && (
+                  <span className='ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-400 text-[9px] font-bold text-white'>
+                    {belumCount}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
           <div className='relative'>
             <svg
@@ -175,31 +177,31 @@ export default function DendaPetugas () {
           <table className='w-full'>
             <thead>
               <tr className='border-b border-gray-100 bg-gray-50/50'>
-                <th className='px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400'>
-                  Peminjam
-                </th>
-                <th className='px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400'>
-                  Alat
-                </th>
-                <th className='px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400'>
-                  Terlambat
-                </th>
-                <th className='px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400'>
-                  Total Denda
-                </th>
-                <th className='px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400'>
-                  Status
-                </th>
-                <th className='px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-gray-400 w-24'>
-                  Aksi
-                </th>
+                {[
+                  'Peminjam',
+                  'Alat',
+                  'Terlambat',
+                  'Total Denda',
+                  'Unit Bermasalah',
+                  'Status',
+                  'Aksi'
+                ].map(h => (
+                  <th
+                    key={h}
+                    className={`px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 ${
+                      h === 'Aksi' ? 'text-center w-28' : 'text-left'
+                    }`}
+                  >
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className='border-b border-gray-50'>
-                    {[100, 120, 60, 90, 80, 70].map((w, j) => (
+                    {[100, 120, 60, 90, 120, 80, 70].map((w, j) => (
                       <td key={j} className='px-4 py-3'>
                         <div
                           className='h-3 bg-gray-100 rounded animate-pulse'
@@ -211,7 +213,7 @@ export default function DendaPetugas () {
                 ))
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan='6' className='px-5 py-12 text-center'>
+                  <td colSpan='7' className='px-5 py-12 text-center'>
                     <div className='flex flex-col items-center gap-2'>
                       <svg
                         width='48'
@@ -240,25 +242,15 @@ export default function DendaPetugas () {
                     className='border-b border-gray-50 hover:bg-gray-50/50 transition-colors'
                   >
                     <td className='px-4 py-2.5'>
-                      <div>
-                        <p className='font-medium text-gray-900 text-sm'>
-                          {d.peminjam}
-                        </p>
-                        {d.tgl_jatuh_tempo && (
-                          <p className='text-[10px] text-gray-400 mt-0.5'>
-                            Jatuh tempo:{' '}
-                            {new Date(d.tgl_jatuh_tempo).toLocaleDateString(
-                              'id-ID'
-                            )}
-                          </p>
-                        )}
-                      </div>
+                      <p className='font-medium text-gray-900 text-sm'>
+                        {d.peminjam}
+                      </p>
                     </td>
                     <td className='px-4 py-2.5 text-sm text-gray-600'>
                       {d.alat}
                     </td>
                     <td className='px-4 py-2.5'>
-                      <span className='inline-flex items-center gap-1 font-semibold text-red-500'>
+                      <span className='inline-flex items-center gap-1 font-semibold text-red-500 text-sm'>
                         <svg
                           width='12'
                           height='12'
@@ -279,15 +271,37 @@ export default function DendaPetugas () {
                         {fmt(d.total_denda)}
                       </span>
                     </td>
+                    {/* Kolom unit bermasalah */}
+                    <td className='px-4 py-2.5'>
+                      {d.unit_bermasalah?.length > 0 ? (
+                        <div className='flex flex-wrap gap-1'>
+                          {d.unit_bermasalah.map(u => (
+                            <span
+                              key={u.id_unit}
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border ${
+                                KONDISI_BADGE[u.kondisi_final] ??
+                                'bg-gray-50 text-gray-500 border-gray-100'
+                              }`}
+                            >
+                              {u.kode_unit}: {getKondisiLabel(u.kondisi_final)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className='text-xs text-gray-400'>
+                          Hanya terlambat
+                        </span>
+                      )}
+                    </td>
                     <td className='px-4 py-2.5'>
                       {d.status_bayar === 'belum_bayar' ? (
                         <span className='inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-medium text-red-600 border border-red-100'>
-                          <span className='h-1.5 w-1.5 rounded-full bg-red-500' />
+                          <span className='h-1.5 w-1.5 rounded-full bg-red-500' />{' '}
                           Belum Lunas
                         </span>
                       ) : (
                         <span className='inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-[10px] font-medium text-green-600 border border-green-100'>
-                          <span className='h-1.5 w-1.5 rounded-full bg-green-500' />
+                          <span className='h-1.5 w-1.5 rounded-full bg-green-500' />{' '}
                           Lunas
                         </span>
                       )}
@@ -331,54 +345,105 @@ export default function DendaPetugas () {
               </p>
             </div>
           ) : (
-            paginatedData.map(d => (
-              <div
-                key={d.id_denda}
-                className='rounded-lg border border-gray-100 bg-white p-3'
-              >
-                <div className='flex items-start justify-between mb-2'>
-                  <div>
-                    <p className='font-semibold text-gray-900 text-sm'>
-                      {d.alat}
-                    </p>
-                    <p className='text-xs text-gray-500'>{d.peminjam}</p>
+            paginatedData.map(d => {
+              const isExpanded = expandedId === d.id_denda
+              return (
+                <div
+                  key={d.id_denda}
+                  className='rounded-lg border border-gray-100 bg-white p-3'
+                >
+                  <div className='flex items-start justify-between mb-2'>
+                    <div>
+                      <p className='font-semibold text-gray-900 text-sm'>
+                        {d.alat}
+                      </p>
+                      <p className='text-xs text-gray-500'>{d.peminjam}</p>
+                    </div>
+                    {d.status_bayar === 'belum_bayar' ? (
+                      <span className='inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[9px] font-medium text-red-600'>
+                        <span className='h-1 w-1 rounded-full bg-red-500' />{' '}
+                        Belum Lunas
+                      </span>
+                    ) : (
+                      <span className='inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[9px] font-medium text-green-600'>
+                        <span className='h-1 w-1 rounded-full bg-green-500' />{' '}
+                        Lunas
+                      </span>
+                    )}
                   </div>
-                  {d.status_bayar === 'belum_bayar' ? (
-                    <span className='inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[9px] font-medium text-red-600'>
-                      <span className='h-1 w-1 rounded-full bg-red-500' />
-                      Belum Lunas
-                    </span>
-                  ) : (
-                    <span className='inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[9px] font-medium text-green-600'>
-                      <span className='h-1 w-1 rounded-full bg-green-500' />
-                      Lunas
-                    </span>
+
+                  <div className='flex justify-between items-center mt-2'>
+                    <div>
+                      <p className='text-xs text-gray-500'>Terlambat</p>
+                      <p className='text-sm font-semibold text-red-500'>
+                        {d.hari_terlambat} hari
+                      </p>
+                    </div>
+                    <div className='text-right'>
+                      <p className='text-xs text-gray-500'>Total Denda</p>
+                      <p className='text-sm font-bold text-gray-900'>
+                        {fmt(d.total_denda)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Unit bermasalah - mobile */}
+                  {d.unit_bermasalah?.length > 0 && (
+                    <div className='mt-2'>
+                      <button
+                        onClick={() =>
+                          setExpandedId(isExpanded ? null : d.id_denda)
+                        }
+                        className='text-xs text-blue-600 font-medium flex items-center gap-1'
+                      >
+                        <svg
+                          width='11'
+                          height='11'
+                          fill='none'
+                          stroke='currentColor'
+                          strokeWidth='2'
+                          viewBox='0 0 24 24'
+                          style={{
+                            transform: isExpanded ? 'rotate(180deg)' : 'none',
+                            transition: 'transform 0.2s'
+                          }}
+                        >
+                          <polyline points='6 9 12 15 18 9' />
+                        </svg>
+                        {isExpanded
+                          ? 'Tutup'
+                          : `${d.unit_bermasalah.length} unit bermasalah`}
+                      </button>
+                      {isExpanded && (
+                        <div className='mt-2 space-y-1'>
+                          {d.unit_bermasalah.map(u => (
+                            <div
+                              key={u.id_unit}
+                              className={`flex items-center justify-between rounded-md border px-2.5 py-1.5 text-xs ${
+                                KONDISI_BADGE[u.kondisi_final] ??
+                                'bg-gray-50 border-gray-100 text-gray-600'
+                              }`}
+                            >
+                              <span className='font-medium'>{u.kode_unit}</span>
+                              <span>{getKondisiLabel(u.kondisi_final)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {d.status_bayar === 'belum_bayar' && (
+                    <button
+                      onClick={() => setConfirmId(d.id_denda)}
+                      className='mt-3 w-full rounded-md bg-green-50 py-1.5 text-xs font-medium text-green-600 hover:bg-green-100 transition-colors'
+                    >
+                      Tandai Lunas
+                    </button>
                   )}
                 </div>
-                <div className='flex justify-between items-center mt-2'>
-                  <div>
-                    <p className='text-xs text-gray-500'>Terlambat</p>
-                    <p className='text-sm font-semibold text-red-500'>
-                      {d.hari_terlambat} hari
-                    </p>
-                  </div>
-                  <div className='text-right'>
-                    <p className='text-xs text-gray-500'>Total Denda</p>
-                    <p className='text-sm font-bold text-gray-900'>
-                      {fmt(d.total_denda)}
-                    </p>
-                  </div>
-                </div>
-                {d.status_bayar === 'belum_bayar' && (
-                  <button
-                    onClick={() => setConfirmId(d.id_denda)}
-                    className='mt-3 w-full rounded-md bg-green-50 py-1.5 text-xs font-medium text-green-600 hover:bg-green-100 transition-colors'
-                  >
-                    Tandai Lunas
-                  </button>
-                )}
-              </div>
-            ))
+              )
+            })
           )}
         </div>
 
@@ -386,8 +451,8 @@ export default function DendaPetugas () {
         {totalPage > 1 && (
           <div className='flex items-center justify-between border-t border-gray-100 px-4 py-2.5'>
             <span className='text-[10px] text-gray-400'>
-              {(page - 1) * limit + 1}–
-              {Math.min(page * limit, filteredData.length)} dari{' '}
+              {(page - 1) * LIMIT + 1}–
+              {Math.min(page * LIMIT, filteredData.length)} dari{' '}
               {filteredData.length}
             </span>
             <div className='flex items-center gap-1'>
@@ -413,7 +478,7 @@ export default function DendaPetugas () {
         )}
       </div>
 
-      {/* Modal Konfirmasi */}
+      {/* Modal Konfirmasi Lunas */}
       {confirmId && (
         <div className='fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-animate'>
           <div

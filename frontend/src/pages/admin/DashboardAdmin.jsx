@@ -1,4 +1,3 @@
-// DashboardAdmin.jsx - Versi Modern Minimalis
 import { useEffect, useState } from 'react'
 import api from '../../lib/api'
 import {
@@ -80,7 +79,6 @@ export default function DashboardAdmin () {
         </p>
       </div>
 
-      {/* Stats Grid */}
       <div className='grid grid-cols-2 lg:grid-cols-4 gap-3'>
         <StatCard
           label='Total Pengguna'
@@ -114,7 +112,6 @@ export default function DashboardAdmin () {
 
       {/* Charts Section */}
       <div className='grid grid-cols-1 lg:grid-cols-2 gap-4'>
-        {/* Kondisi Alat Chart */}
         <div className='bg-white rounded-lg border border-gray-100 p-4 shadow-sm'>
           <div className='flex items-center justify-between mb-3'>
             <div>

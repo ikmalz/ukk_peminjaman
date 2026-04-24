@@ -61,7 +61,6 @@ export default function Navbar ({ onMenuClick }) {
           </svg>
         </button>
 
-        {/* Breadcrumb style title */}
         <div className='hidden sm:flex items-center gap-2'>
           <span className='text-gray-400 text-sm'>/</span>
           <h1 className='text-sm font-medium text-gray-700'>{title}</h1>
@@ -73,7 +72,6 @@ export default function Navbar ({ onMenuClick }) {
 
       {/* Right Section */}
       <div className='flex items-center gap-3'>
-        {/* User Info */}
         <div className='hidden sm:flex items-center gap-3'>
           <div className='text-right'>
             <p className='text-xs font-medium text-gray-700'>{user?.name}</p>

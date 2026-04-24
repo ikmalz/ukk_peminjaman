@@ -59,7 +59,6 @@ export default function NotFound() {
       `}</style>
 
       <div className="max-w-md w-full text-center">
-        {/* 404 Illustration */}
         <div className="mb-8 animate-float">
           <div className="relative inline-block">
             <div className="text-8xl font-bold text-gray-200">404</div>

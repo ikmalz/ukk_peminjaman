@@ -1,4 +1,3 @@
-// PengembalianPeminjam.jsx - Versi Modern dengan status denda yang benar
 import { useEffect, useState } from 'react'
 import api from '../../lib/api'
 
@@ -20,6 +19,9 @@ export default function PengembalianPeminjam () {
   const [modal, setModal] = useState({ show: false, type: '', message: '' })
   const [showAll, setShowAll] = useState(false)
   const [submitting, setSubmitting] = useState(null)
+  const [unitsData, setUnitsData] = useState({})  
+  const [loadingUnits, setLoadingUnits] = useState({}) 
+  const [selectedUnits, setSelectedUnits] = useState({})
 
   const displayedDenda = showAll ? denda : denda.slice(0, 3)
 
@@ -31,6 +33,10 @@ export default function PengembalianPeminjam () {
           p => p.status === 'dipinjam' || p.status === 'menunggu_pengembalian'
         ) || []
       setData(aktif)
+
+      for (const peminjaman of aktif) {
+        await fetchUnits(peminjaman.id_peminjaman)
+      }
     } catch (err) {
       console.error('Gagal fetch peminjaman:', err)
     }
@@ -51,24 +57,87 @@ export default function PengembalianPeminjam () {
     fetchDenda()
   }, [])
 
+  const fetchUnits = async id_peminjaman => {
+    setLoadingUnits(prev => ({ ...prev, [id_peminjaman]: true }))
+    try {
+      const res = await api.get(`/pengembalian/unit-tersedia/${id_peminjaman}`)
+      setUnitsData(prev => ({
+        ...prev,
+        [id_peminjaman]: {
+          units: res.data.data || [],
+          stats: res.data.stats,
+          peminjaman: res.data.peminjaman
+        }
+      }))
+    } catch (err) {
+      console.error('Gagal ambil unit:', err)
+      setUnitsData(prev => ({
+        ...prev,
+        [id_peminjaman]: {
+          units: [],
+          stats: null,
+          error: err.response?.data?.message
+        }
+      }))
+    } finally {
+      setLoadingUnits(prev => ({ ...prev, [id_peminjaman]: false }))
+    }
+  }
+
   const handleKeteranganChange = (id, value) => {
-    setForm(prev => ({ ...prev, [id]: { keterangan: value } }))
+    setForm(prev => ({ ...prev, [id]: { ...prev[id], keterangan: value } }))
+  }
+
+  const handleSelectUnit = (peminjamanId, unitId, isChecked) => {
+    setSelectedUnits(prev => {
+      const current = prev[peminjamanId] || []
+      return {
+        ...prev,
+        [peminjamanId]: isChecked
+          ? [...current, unitId]
+          : current.filter(id => id !== unitId)
+      }
+    })
+  }
+
+  const handleSelectAllUnits = (peminjamanId, unitIds) => {
+    setSelectedUnits(prev => {
+      const currentSelected = prev[peminjamanId] || []
+      const allSelected =
+        unitIds.length === currentSelected.length && unitIds.length > 0
+      return {
+        ...prev,
+        [peminjamanId]: allSelected ? [] : [...unitIds]
+      }
+    })
   }
 
   const ajukanPengembalian = async id_peminjaman => {
+    const unit_ids = selectedUnits[id_peminjaman] || []
+
+    if (unit_ids.length === 0) {
+      setModal({
+        show: true,
+        type: 'error',
+        message: 'Pilih minimal 1 unit untuk dikembalikan'
+      })
+      return
+    }
+
     setSubmitting(id_peminjaman)
+
     try {
       await api.post('/pengembalian', {
         id_peminjaman,
         tgl_kembali: new Date().toISOString().split('T')[0],
-        keterangan_user: form[id_peminjaman]?.keterangan || ''
+        keterangan_user: form[id_peminjaman]?.keterangan || '',
+        unit_ids
       })
 
       setModal({
         show: true,
         type: 'success',
-        message:
-          'Pengembalian berhasil diajukan dan menunggu verifikasi petugas.'
+        message: `${unit_ids.length} unit berhasil diajukan pengembalian dan menunggu verifikasi petugas.`
       })
 
       setForm(prev => {
@@ -77,8 +146,14 @@ export default function PengembalianPeminjam () {
         return newForm
       })
 
-      fetchData()
-      fetchDenda() 
+      setSelectedUnits(prev => {
+        const newSelected = { ...prev }
+        delete newSelected[id_peminjaman]
+        return newSelected
+      })
+
+      await fetchData()
+      fetchDenda()
     } catch (err) {
       setModal({
         show: true,
@@ -209,7 +284,6 @@ export default function PengembalianPeminjam () {
                     Terlambat {d.hari_terlambat} hari
                   </p>
                 </div>
-                {/* PERBAIKAN: Status badge berdasarkan status_bayar */}
                 {d.status_bayar === 'belum_bayar' ? (
                   <span className='inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[9px] font-medium text-red-600 border border-red-100'>
                     <span className='h-1.5 w-1.5 rounded-full bg-red-500' />
@@ -263,6 +337,11 @@ export default function PengembalianPeminjam () {
             const status = getStatusInfo(p)
             const isLate = status.label.includes('Terlambat')
             const isWaiting = p.status === 'menunggu_pengembalian'
+            const unitData = unitsData[p.id_peminjaman]
+            const availableUnits = unitData?.units || []
+            const stats = unitData?.stats
+            const isLoading = loadingUnits[p.id_peminjaman]
+            const selectedCount = (selectedUnits[p.id_peminjaman] || []).length
 
             return (
               <div
@@ -292,6 +371,21 @@ export default function PengembalianPeminjam () {
                             {formatDate(p.tgl_jatuh_tempo)}
                           </span>
                         </span>
+                        {stats && (
+                          <>
+                            <span>
+                              Total unit:{' '}
+                              <span className='font-medium text-gray-700'>
+                                {stats.total_dipinjam}
+                              </span>
+                            </span>
+                            {stats.sudah_dikembalikan > 0 && (
+                              <span className='text-green-600'>
+                                Sudah kembali: {stats.sudah_dikembalikan}
+                              </span>
+                            )}
+                          </>
+                        )}
                       </div>
                     </div>
                     <div
@@ -313,29 +407,113 @@ export default function PengembalianPeminjam () {
                 </div>
 
                 {!isWaiting && p.status === 'dipinjam' && (
-                  <div className='border-t border-gray-100 bg-gray-50/50 px-4 py-3'>
-                    <label className='block text-[10px] font-medium text-gray-500 mb-1'>
-                      Catatan Tambahan (Opsional)
-                    </label>
-                    <input
-                      type='text'
-                      className='w-full rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-100'
-                      placeholder='Contoh: Ada goresan kecil pada body alat...'
-                      value={form[p.id_peminjaman]?.keterangan || ''}
-                      onChange={e =>
-                        handleKeteranganChange(p.id_peminjaman, e.target.value)
-                      }
-                    />
-                    <button
-                      onClick={() => ajukanPengembalian(p.id_peminjaman)}
-                      disabled={submitting === p.id_peminjaman}
-                      className='mt-3 w-full rounded-md bg-gray-900 py-3 text-xs font-medium text-white hover:bg-gray-800 transition disabled:opacity-60'
-                    >
-                      {submitting === p.id_peminjaman
-                        ? 'Memproses...'
-                        : 'Ajukan Pengembalian'}
-                    </button>
-                  </div>
+                  <>
+                    <div className='px-4 pb-2'>
+                      <div className='flex items-center justify-between mb-2'>
+                        <p className='text-xs font-medium text-gray-600'>
+                          Pilih Unit yang Dikembalikan
+                          {availableUnits.length > 0 && (
+                            <span className='ml-1 text-gray-400'>
+                              ({selectedCount}/{availableUnits.length})
+                            </span>
+                          )}
+                        </p>
+                        {availableUnits.length > 1 && (
+                          <button
+                            onClick={() =>
+                              handleSelectAllUnits(
+                                p.id_peminjaman,
+                                availableUnits.map(u => u.id_unit)
+                              )
+                            }
+                            className='text-[10px] text-blue-500 hover:text-blue-600'
+                          >
+                            {selectedCount === availableUnits.length
+                              ? 'Batal Pilih Semua'
+                              : 'Pilih Semua'}
+                          </button>
+                        )}
+                      </div>
+
+                      {isLoading ? (
+                        <div className='text-center py-4'>
+                          <div className='inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600'></div>
+                          <p className='text-xs text-gray-400 mt-1'>
+                            Memuat unit...
+                          </p>
+                        </div>
+                      ) : availableUnits.length === 0 ? (
+                        <div className='text-center py-4 bg-gray-50 rounded-md'>
+                          <p className='text-xs text-gray-400'>
+                            {unitData?.error ||
+                              'Semua unit sudah dikembalikan atau sedang menunggu verifikasi'}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className='grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-2 bg-gray-50 rounded-md'>
+                          {availableUnits.map(u => (
+                            <label
+                              key={u.id_unit}
+                              className='flex items-center gap-2 text-xs p-1 hover:bg-white rounded transition'
+                            >
+                              <input
+                                type='checkbox'
+                                checked={
+                                  selectedUnits[p.id_peminjaman]?.includes(
+                                    u.id_unit
+                                  ) || false
+                                }
+                                onChange={e =>
+                                  handleSelectUnit(
+                                    p.id_peminjaman,
+                                    u.id_unit,
+                                    e.target.checked
+                                  )
+                                }
+                                className='rounded border-gray-300'
+                              />
+                              <span className='text-gray-700'>
+                                {u.kode_unit}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className='border-t border-gray-100 bg-gray-50/50 px-4 py-3'>
+                      <label className='block text-[10px] font-medium text-gray-500 mb-1'>
+                        Catatan Tambahan (Opsional)
+                      </label>
+                      <input
+                        type='text'
+                        className='w-full rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-100'
+                        placeholder='Contoh: Ada goresan kecil pada body alat...'
+                        value={form[p.id_peminjaman]?.keterangan || ''}
+                        onChange={e =>
+                          handleKeteranganChange(
+                            p.id_peminjaman,
+                            e.target.value
+                          )
+                        }
+                      />
+                      <button
+                        onClick={() => ajukanPengembalian(p.id_peminjaman)}
+                        disabled={
+                          submitting === p.id_peminjaman ||
+                          selectedCount === 0 ||
+                          isLoading
+                        }
+                        className='mt-3 w-full rounded-md bg-gray-900 py-3 text-xs font-medium text-white hover:bg-gray-800 transition disabled:opacity-60 disabled:cursor-not-allowed'
+                      >
+                        {submitting === p.id_peminjaman
+                          ? 'Memproses...'
+                          : selectedCount === 0
+                          ? 'Pilih Unit Terlebih Dahulu'
+                          : `Ajukan Pengembalian (${selectedCount} unit)`}
+                      </button>
+                    </div>
+                  </>
                 )}
 
                 {isWaiting && (
@@ -364,7 +542,6 @@ export default function PengembalianPeminjam () {
         </div>
       )}
 
-      {/* Modal Notification */}
       {modal.show && (
         <div className='fixed inset-0 z-50 flex items-center justify-center p-4'>
           <div

@@ -1,4 +1,3 @@
-// ScanQR.jsx - Versi Modern Minimalis
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import { useEffect, useState, useRef } from 'react'
 import api from '../../lib/api'
@@ -95,7 +94,6 @@ export default function ScanQR () {
       </div>
 
       <div className='grid lg:grid-cols-2 gap-5'>
-        {/* Scanner Section */}
         <div className='rounded-lg border border-gray-100 bg-white overflow-hidden shadow-sm'>
           <div className='border-b border-gray-100 px-4 py-3 bg-gray-50/50'>
             <div className='flex items-center gap-2'>

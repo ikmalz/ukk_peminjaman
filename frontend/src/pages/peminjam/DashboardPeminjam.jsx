@@ -36,7 +36,6 @@ export default function DashboardPeminjam () {
           menunggu: peminjaman.filter(p => p.status === 'menunggu').length
         })
 
-        // Recent loans (3 terbaru)
         const sortedLoans = [...peminjaman].sort(
           (a, b) => new Date(b.tgl_pinjam) - new Date(a.tgl_pinjam)
         )
@@ -262,7 +261,6 @@ export default function DashboardPeminjam () {
   )
 }
 
-// StatCard Component
 function StatCard ({ label, value, sub, icon, loading, urgent, color }) {
   const icons = {
     tool: (
@@ -361,7 +359,6 @@ function StatCard ({ label, value, sub, icon, loading, urgent, color }) {
   )
 }
 
-// QuickActionCard Component
 function QuickActionCard ({ title, description, icon, link, color }) {
   const colors = {
     blue: 'border-blue-100 bg-blue-50/30 hover:bg-blue-50',

@@ -1,4 +1,3 @@
-// LogAktivitas.jsx - Versi Modern Minimalis
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { format } from 'date-fns'
@@ -44,7 +43,6 @@ const LogAktivitas = () => {
     fetchLogs()
   }, [])
 
-  // Filter logs berdasarkan search
   const filteredLogs = logs.filter(
     log =>
       log.user?.toLowerCase().includes(search.toLowerCase()) ||
@@ -58,18 +56,15 @@ const LogAktivitas = () => {
     setPage(1)
   }, [search])
 
-  // Reset filter
   const resetFilter = () => {
     setSearch('')
     setPage(1)
   }
 
-  // Format waktu
   const formatWaktu = waktu => {
     return format(new Date(waktu), 'dd MMM yyyy • HH:mm')
   }
 
-  // Dapatkan icon berdasarkan aktivitas
   const getActivityIcon = aktivitas => {
     if (aktivitas?.includes('login')) return '🔐'
     if (aktivitas?.includes('logout')) return '🚪'
@@ -86,7 +81,6 @@ const LogAktivitas = () => {
     return '📌'
   }
 
-  // Warna badge berdasarkan aktivitas
   const getActivityBadgeClass = aktivitas => {
     if (aktivitas?.includes('login'))
       return 'bg-blue-50 text-blue-600 border-blue-100'
@@ -185,7 +179,6 @@ const LogAktivitas = () => {
 
       {/* Main Card */}
       <div className='rounded-lg border border-gray-100 bg-white overflow-hidden shadow-sm'>
-        {/* Search & Refresh */}
         <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-gray-100 px-4 py-2.5'>
           <div className='relative flex-1 max-w-sm'>
             <svg

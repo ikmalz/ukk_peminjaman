@@ -4,7 +4,7 @@ exports.verifyToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
 
   if (!authHeader) {
-    return res.status(401).json({
+    return res.status( ).json({
       message: "Token tidak ditemukan, silahkan login",
     });
   }

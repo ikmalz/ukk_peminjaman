@@ -21,20 +21,41 @@ const blank = {
 
 function ActionMenu ({ alat, onEdit, onToggle, onDelete, onLihatUnit }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef(null)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const btnRef = useRef(null)
+  const menuRef = useRef(null)
+
+  const handleOpen = () => {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setPos({
+        top: rect.bottom + window.scrollY + 4,
+        left: rect.right + window.scrollX - 160 
+      })
+    }
+    setOpen(p => !p)
+  }
 
   useEffect(() => {
     const handler = e => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(e.target) &&
+        btnRef.current &&
+        !btnRef.current.contains(e.target)
+      ) {
+        setOpen(false)
+      }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
   return (
-    <div className='relative' ref={ref}>
+    <div className='relative'>
       <button
-        onClick={() => setOpen(p => !p)}
+        ref={btnRef}
+        onClick={handleOpen}
         className='p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors'
         title='Aksi'
       >
@@ -46,7 +67,16 @@ function ActionMenu ({ alat, onEdit, onToggle, onDelete, onLihatUnit }) {
       </button>
 
       {open && (
-        <div className='absolute right-0 top-full mt-1 z-20 w-40 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg'>
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            left: pos.left,
+            zIndex: 9999
+          }}
+          className='w-40 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg'
+        >
           <button
             onClick={() => {
               onEdit()
@@ -536,7 +566,7 @@ export default function DaftarAlat () {
 
     try {
       await api.delete(`/alat/${id}`)
-      navigate('/result', {
+      navigate('/admin/alat', {
         state: {
           success: true,
           title: 'Alat Berhasil Dihapus',
@@ -545,7 +575,7 @@ export default function DaftarAlat () {
         }
       })
     } catch (err) {
-      navigate('/result', {
+      navigate('/admin/alat', {
         state: {
           success: false,
           title: 'Gagal Menghapus Alat',

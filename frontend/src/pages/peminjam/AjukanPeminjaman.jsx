@@ -1,4 +1,3 @@
-// AjukanPeminjaman.jsx - Versi Modern Minimalis
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { io } from 'socket.io-client'
@@ -69,7 +68,6 @@ export default function AjukanPeminjaman () {
     init()
   }, [id, location.state])
 
-  // Cek status peminjaman aktif
   const checkPeminjaman = async () => {
     try {
       const res = await api.get('/peminjaman/aktif')
@@ -140,7 +138,13 @@ export default function AjukanPeminjaman () {
         )
       : 0
 
-  const perluDeskripsi = diffDays > 7
+  // const perluDeskripsi = diffDays > 7
+  const tambahHari = (dateStr, hari) => {
+    if (!dateStr) return ''
+    const d = new Date(dateStr)
+    d.setDate(d.getDate() + hari)
+    return d.toISOString().split('T')[0]
+  }
 
   const submit = async e => {
     e.preventDefault()
@@ -162,11 +166,15 @@ export default function AjukanPeminjaman () {
       showToast('Tanggal kembali harus setelah tanggal pinjam', 'error')
       return
     }
-    if (perluDeskripsi && !deskripsi.trim()) {
-      showToast(
-        'Durasi lebih dari 7 hari. Wajib isi alasan pengajuan.',
-        'error'
-      )
+    // if (perluDeskripsi && !deskripsi.trim()) {
+    //   showToast(
+    //     'Durasi lebih dari 7 hari. Wajib isi alasan pengajuan.',
+    //     'error'
+    //   )
+    //   return
+    // }
+    if (diffDays > 7) {
+      showToast('Durasi peminjaman maksimal 7 hari', 'error')
       return
     }
 
@@ -245,7 +253,6 @@ export default function AjukanPeminjaman () {
     )
   }
 
-  // Status Menunggu
   if (statusAktif === 'menunggu') {
     return (
       <div className='flex flex-col items-center justify-center py-16 text-center'>
@@ -278,7 +285,6 @@ export default function AjukanPeminjaman () {
     )
   }
 
-  // Status Aktif (Disetujui/Dipinjam)
   if (statusAktif === 'disetujui' || statusAktif === 'dipinjam') {
     return (
       <div className='flex flex-col items-center justify-center py-16 text-center'>
@@ -445,9 +451,10 @@ export default function AjukanPeminjaman () {
               type='date'
               min={
                 tglPinjam
-                  ? tambahSatuHari(tglPinjam)
+                  ? tambahHari(tglPinjam, 1)
                   : new Date().toISOString().split('T')[0]
               }
+              max={tglPinjam ? tambahHari(tglPinjam, 7) : ''}
               required
               className={inputCls}
               value={tglKembali}
@@ -459,37 +466,25 @@ export default function AjukanPeminjaman () {
           {/* Durasi Info */}
           {diffDays > 0 && (
             <div
-              className={`rounded-md p-2 text-[10px] font-medium ${
-                diffDays > 7
-                  ? 'bg-orange-50 text-orange-600 border border-orange-100'
-                  : 'bg-blue-50 text-blue-600 border border-blue-100'
+              className={`rounded-md p-2 text-[10px] font-medium border ${
+                diffDays === 7
+                  ? 'bg-orange-50 text-orange-600 border-orange-100'
+                  : 'bg-blue-50 text-blue-600 border-blue-100'
               }`}
             >
-              {diffDays > 7
-                ? `⚠️ Durasi ${diffDays} hari melebihi batas normal (7 hari). Wajib isi alasan.`
-                : `✅ Durasi peminjaman: ${diffDays} hari`}
+              {diffDays === 7
+                ? `⚠️ Durasi ${diffDays} hari (maksimal)`
+                : `✅ Durasi peminjaman: ${diffDays} hari (sisa ${
+                    7 - diffDays
+                  } hari)`}
             </div>
           )}
 
-          <Field
-            label={perluDeskripsi ? 'Alasan Peminjaman' : 'Catatan (Opsional)'}
-            hint={
-              perluDeskripsi ? 'Jelaskan alasan durasi lebih dari 7 hari' : ''
-            }
-            required={perluDeskripsi}
-          >
+          <Field label='Catatan (Opsional)'>
             <textarea
               rows={2}
-              className={`${inputCls} resize-none ${
-                perluDeskripsi
-                  ? 'border-orange-200 focus:border-orange-300'
-                  : ''
-              }`}
-              placeholder={
-                perluDeskripsi
-                  ? 'Contoh: Bootcamp 10 hari di luar kota...'
-                  : 'Tambahkan catatan jika ada...'
-              }
+              className={`${inputCls} resize-none`}
+              placeholder='Tambahkan catatan jika ada...'
               value={deskripsi}
               onChange={e => setDeskripsi(e.target.value)}
               disabled={isBlocked}
